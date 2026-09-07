@@ -11,7 +11,7 @@ const FEEDBACK_PATH = "data/feedback.jsonl";
 export const RidesHandlersNoDeps = HttpApiBuilder.group(
   ArahApi,
   "rides",
-  Effect.fn(function*(handlers) {
+  Effect.fn(function* (handlers) {
     const catalog = yield* Catalog;
     const state = yield* ObservationState;
     const nowMs = yield* Clock.currentTimeMillis;
@@ -43,11 +43,13 @@ export const RidesHandlersNoDeps = HttpApiBuilder.group(
           routes: [...catalog.routes],
         }),
       feedback: ({ payload }) =>
-        Effect.gen(function*() {
+        Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
-          yield* fs.writeFileString(FEEDBACK_PATH, `${JSON.stringify(payload)}\n`, { flag: "a" }).pipe(
-            Effect.orDie,
-          );
+          yield* fs
+            .writeFileString(FEEDBACK_PATH, `${JSON.stringify(payload)}\n`, {
+              flag: "a",
+            })
+            .pipe(Effect.orDie);
           return Schema.decodeSync(Received)({ received: true });
         }),
     });

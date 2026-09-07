@@ -18,7 +18,10 @@ import type {
   RouteId,
   RouteRequest,
 } from "../src/domain.js";
-import { EvidenceId as EvidenceIdSchema, RouteId as RouteIdSchema } from "../src/domain.js";
+import {
+  EvidenceId as EvidenceIdSchema,
+  RouteId as RouteIdSchema,
+} from "../src/domain.js";
 
 function routeId(raw: string): RouteId {
   return Schema.decodeSync(RouteIdSchema)(raw);
@@ -140,7 +143,9 @@ describe("assessCandidate", () => {
             observations: [
               makeObservation({
                 severity: "severe",
-                observedAt: new Date(NOW - (minutesPast + 120) * 60_000).toISOString(),
+                observedAt: new Date(
+                  NOW - (minutesPast + 120) * 60_000,
+                ).toISOString(),
                 expiresAt: new Date(NOW - minutesPast * 60_000).toISOString(),
               }),
             ],
@@ -158,7 +163,11 @@ describe("assessCandidate", () => {
   it("missing coverage caps the verdict at withhold", () => {
     fc.assert(
       fc.property(
-        fc.constantFrom<CoverageEntry["state"]>("not-covered", "unavailable", "stale"),
+        fc.constantFrom<CoverageEntry["state"]>(
+          "not-covered",
+          "unavailable",
+          "stale",
+        ),
         (state: CoverageEntry["state"]) => {
           const ranked = assessCandidate(
             {
@@ -201,13 +210,18 @@ describe("decide", () => {
       {
         request: trainRequest,
         routes,
-        observations: [makeObservation({ severity: "severe", id: evidenceId("obs-block") })],
+        observations: [
+          makeObservation({ severity: "severe", id: evidenceId("obs-block") }),
+        ],
         coverages: [],
         mapSnapshotId: "snap-1",
       },
       NOW,
     );
-    expect(output.ranked.map((row) => row.routeId)).toEqual(["a-clear", "b-blocked"]);
+    expect(output.ranked.map((row) => row.routeId)).toEqual([
+      "a-clear",
+      "b-blocked",
+    ]);
   });
 
   it("is deterministic", () => {
@@ -225,7 +239,13 @@ describe("decide", () => {
     const output = decide(
       {
         request: trainRequest,
-        routes: [makeRoute({ id: routeId("p"), name: "point", kind: "point-to-point" })],
+        routes: [
+          makeRoute({
+            id: routeId("p"),
+            name: "point",
+            kind: "point-to-point",
+          }),
+        ],
         observations: [],
         coverages: [],
         mapSnapshotId: "snap-1",
@@ -263,7 +283,9 @@ describe("materialize", () => {
           const first = state.observations[0];
           expect(first !== undefined).toBe(true);
           if (first !== undefined) {
-            expect(Date.parse(first.observedAt) < Date.parse(first.expiresAt)).toBe(true);
+            expect(
+              Date.parse(first.observedAt) < Date.parse(first.expiresAt),
+            ).toBe(true);
           }
         },
       ),
@@ -274,7 +296,9 @@ describe("materialize", () => {
 
 describe("parseRequestBody", () => {
   it("parses a valid train request and rejects malformed bodies", () => {
-    expect(parseRequestBody(JSON.stringify(trainRequest))).toEqual(trainRequest);
+    expect(parseRequestBody(JSON.stringify(trainRequest))).toEqual(
+      trainRequest,
+    );
     expect(parseRequestBody("{nope")).toBe(null);
     expect(parseRequestBody(JSON.stringify({ kind: "fly" }))).toBe(null);
   });
@@ -283,6 +307,8 @@ describe("parseRequestBody", () => {
 describe("routeTouches", () => {
   it("detects interior route points", () => {
     expect(routeTouches(makeRoute({}), SQUARE)).toBe(true);
-    expect(routeTouches(makeRoute({ points: [{ lat: 0, lon: 0 }] }), SQUARE)).toBe(false);
+    expect(
+      routeTouches(makeRoute({ points: [{ lat: 0, lon: 0 }] }), SQUARE),
+    ).toBe(false);
   });
 });

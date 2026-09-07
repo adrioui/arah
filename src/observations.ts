@@ -1,11 +1,14 @@
-import { Clock, Context, Effect, Exit, FileSystem, Layer, Schema } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import {
-  CoverageEntry,
-  EvidenceId,
-  GeoPoint,
-  Observation,
-} from "./domain.js";
+  Clock,
+  Context,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Schema,
+} from "effect";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { CoverageEntry, EvidenceId, GeoPoint, Observation } from "./domain.js";
 
 /** Fixture observation with relative validity. Materialized with a clock. */
 const FixtureObservation = Schema.Struct({
@@ -57,7 +60,8 @@ export interface ObservationSnapshot {
 }
 
 const OBSERVATIONS_PATH = "data/observations.json";
-const FLOOD_URL = "https://data.petabencana.id/floods?admin=ID-JK&minimum_state=1";
+const FLOOD_URL =
+  "https://data.petabencana.id/floods?admin=ID-JK&minimum_state=1";
 const MINUTE_MS = 60_000;
 
 /** Pure materialization. Relative fixture times become absolute claims. */
@@ -73,9 +77,13 @@ export function materialize(
       source: fixture.source,
       severity: fixture.severity,
       polygon: fixture.polygon,
-      observedAt: new Date(nowMs - fixture.minutesAgo * MINUTE_MS).toISOString(),
+      observedAt: new Date(
+        nowMs - fixture.minutesAgo * MINUTE_MS,
+      ).toISOString(),
       expiresAt: new Date(
-        nowMs - fixture.minutesAgo * MINUTE_MS + fixture.validForMinutes * MINUTE_MS,
+        nowMs -
+          fixture.minutesAgo * MINUTE_MS +
+          fixture.validForMinutes * MINUTE_MS,
       ).toISOString(),
       coverage: fixture.coverage,
       note: fixture.note,
@@ -121,11 +129,13 @@ function floodFeatureToObservation(
 function fetchLiveFlood(
   nowMs: number,
 ): Effect.Effect<ReadonlyArray<Observation>, never, HttpClient.HttpClient> {
-  return Effect.gen(function*() {
+  return Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     const fetched = yield* Effect.exit(
       client.get(FLOOD_URL).pipe(
-        Effect.flatMap((response) => HttpClientResponse.schemaBodyJson(FloodPayload)(response)),
+        Effect.flatMap((response) =>
+          HttpClientResponse.schemaBodyJson(FloodPayload)(response),
+        ),
         Effect.timeout(8000),
       ),
     );
@@ -138,31 +148,55 @@ function fetchLiveFlood(
   });
 }
 
-export class ObservationState extends Context.Service<ObservationState, ObservationSnapshot>()(
-  "arah/ObservationState",
-) {
+export class ObservationState extends Context.Service<
+  ObservationState,
+  ObservationSnapshot
+>()("arah/ObservationState") {
   static readonly layer = Layer.effect(
     ObservationState,
-    Effect.gen(function*() {
+    Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const text = yield* fs.readFileString(OBSERVATIONS_PATH).pipe(
-        Effect.catch(() => Effect.fail(new ObservationsReadError({ path: OBSERVATIONS_PATH }))),
-      );
-      const exit = Schema.decodeUnknownExit(Schema.fromJsonString(ObservationsFile))(text);
+      const text = yield* fs
+        .readFileString(OBSERVATIONS_PATH)
+        .pipe(
+          Effect.catch(() =>
+            Effect.fail(new ObservationsReadError({ path: OBSERVATIONS_PATH })),
+          ),
+        );
+      const exit = Schema.decodeUnknownExit(
+        Schema.fromJsonString(ObservationsFile),
+      )(text);
       if (Exit.isSuccess(exit) === false) {
         return yield* new ObservationsParseError({ path: OBSERVATIONS_PATH });
       }
       const nowMs = yield* Clock.currentTimeMillis;
       const liveFlag = yield* Effect.sync(() => process.env["ARAH_LIVE"] ?? "");
       if (liveFlag !== "1") {
-        return materialize(exit.value.observations, exit.value.coverages, "fixture", nowMs);
+        return materialize(
+          exit.value.observations,
+          exit.value.coverages,
+          "fixture",
+          nowMs,
+        );
       }
       const client = yield* HttpClient.HttpClient;
-      const live = yield* fetchLiveFlood(nowMs).pipe(Effect.provideService(HttpClient.HttpClient, client));
+      const live = yield* fetchLiveFlood(nowMs).pipe(
+        Effect.provideService(HttpClient.HttpClient, client),
+      );
       if (live.length === 0) {
-        return materialize(exit.value.observations, exit.value.coverages, "fixture", nowMs);
+        return materialize(
+          exit.value.observations,
+          exit.value.coverages,
+          "fixture",
+          nowMs,
+        );
       }
-      const base = materialize(exit.value.observations, exit.value.coverages, "live-peta", nowMs);
+      const base = materialize(
+        exit.value.observations,
+        exit.value.coverages,
+        "live-peta",
+        nowMs,
+      );
       return { ...base, observations: [...base.observations, ...live] };
     }),
   );

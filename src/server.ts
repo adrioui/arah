@@ -13,7 +13,7 @@ const ApiRoutes = HttpApiBuilder.layer(ArahApi, {
 const DocsRoute = HttpApiScalar.layer(ArahApi, { path: "/docs" });
 
 const StaticRoutes = HttpRouter.use(
-  Effect.fn(function*(router) {
+  Effect.fn(function* (router) {
     yield* router.add(
       "GET",
       "/",

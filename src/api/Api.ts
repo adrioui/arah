@@ -63,7 +63,6 @@ export class RidesApiGroup extends HttpApiGroup.make("rides")
       success: Received,
     }),
   )
-  .prefix("/api")
-{}
+  .prefix("/api") {}
 
 export class ArahApi extends HttpApi.make("arah-api").add(RidesApiGroup) {}

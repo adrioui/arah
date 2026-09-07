@@ -37,7 +37,12 @@ let selectedId = null;
 
 function verdictColor(verdict) {
   const root = getComputedStyle(document.documentElement);
-  const tokens = { allow: "--ride", warn: "--caution", withhold: "--hold", block: "--stop" };
+  const tokens = {
+    allow: "--ride",
+    warn: "--caution",
+    withhold: "--hold",
+    block: "--stop",
+  };
   return root.getPropertyValue(tokens[verdict]).trim() || "#1c2b33";
 }
 
@@ -66,7 +71,10 @@ function renderTrace(routeId, verdict) {
   if (route === undefined) {
     return;
   }
-  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  const line = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "polyline",
+  );
   line.setAttribute("points", project(route.points));
   line.setAttribute("stroke", verdictColor(verdict));
   svg.appendChild(line);
@@ -97,7 +105,8 @@ function renderEvidence(candidate) {
 function select(routeId, verdict) {
   selectedId = routeId;
   renderTrace(routeId, verdict);
-  const candidate = (window.__lastRanked || []).find((row) => row.routeId === routeId) || null;
+  const candidate =
+    (window.__lastRanked || []).find((row) => row.routeId === routeId) || null;
   renderEvidence(candidate);
   document.querySelectorAll("#candidates li").forEach((row) => {
     if (row.dataset.route === routeId) {
@@ -111,7 +120,10 @@ function select(routeId, verdict) {
 function render(decision) {
   window.__lastRanked = decision.ranked;
   const title = document.getElementById("resultTitle");
-  title.textContent = decision.ranked.length === 0 ? "No routes matched" : `${decision.ranked.length} candidates`;
+  title.textContent =
+    decision.ranked.length === 0
+      ? "No routes matched"
+      : `${decision.ranked.length} candidates`;
   const list = document.getElementById("candidates");
   list.innerHTML = "";
   decision.ranked.forEach((candidate) => {
@@ -119,7 +131,10 @@ function render(decision) {
     item.dataset.verdict = candidate.verdict;
     item.dataset.route = candidate.routeId;
     const route = geometries[candidate.routeId];
-    const stats = route === undefined ? "" : `${route.distanceKm} km, ${route.climbM} m climb`;
+    const stats =
+      route === undefined
+        ? ""
+        : `${route.distanceKm} km, ${route.climbM} m climb`;
     const name = document.createElement("div");
     name.textContent = `${candidate.routeName} `;
     const verdict = document.createElement("span");
@@ -131,7 +146,9 @@ function render(decision) {
     meta.textContent = stats;
     item.appendChild(name);
     item.appendChild(meta);
-    item.addEventListener("click", () => select(candidate.routeId, candidate.verdict));
+    item.addEventListener("click", () =>
+      select(candidate.routeId, candidate.verdict),
+    );
     list.appendChild(item);
   });
   const options = document.getElementById("feedbackRoute");
@@ -165,12 +182,16 @@ async function postJson(path, body) {
 
 async function runCheck(name) {
   document.querySelectorAll("[data-check]").forEach((button) => {
-    button.setAttribute("aria-pressed", button.dataset.check === name ? "true" : "false");
+    button.setAttribute(
+      "aria-pressed",
+      button.dataset.check === name ? "true" : "false",
+    );
   });
   try {
     render(await postJson("/api/decide", CHECKS[name]));
   } catch {
-    document.getElementById("resultTitle").textContent = "That check failed. Try again.";
+    document.getElementById("resultTitle").textContent =
+      "That check failed. Try again.";
   }
 }
 
@@ -186,26 +207,29 @@ async function boot() {
       geometries[route.id] = route;
     });
   } catch {
-    document.getElementById("health").textContent = "Feed status unavailable. Start the server first.";
+    document.getElementById("health").textContent =
+      "Feed status unavailable. Start the server first.";
   }
   document.querySelectorAll("[data-check]").forEach((button) => {
     button.addEventListener("click", () => runCheck(button.dataset.check));
   });
-  document.getElementById("feedbackForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const status = document.getElementById("feedbackStatus");
-    try {
-      await postJson("/api/feedback", {
-        routeId: document.getElementById("feedbackRoute").value,
-        kind: document.getElementById("feedbackKind").value,
-        text: document.getElementById("feedbackText").value,
-        at: new Date().toISOString(),
-      });
-      status.textContent = "Report received. Thank you.";
-    } catch {
-      status.textContent = "Report failed. Check the text and try again.";
-    }
-  });
+  document
+    .getElementById("feedbackForm")
+    .addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const status = document.getElementById("feedbackStatus");
+      try {
+        await postJson("/api/feedback", {
+          routeId: document.getElementById("feedbackRoute").value,
+          kind: document.getElementById("feedbackKind").value,
+          text: document.getElementById("feedbackText").value,
+          at: new Date().toISOString(),
+        });
+        status.textContent = "Report received. Thank you.";
+      } catch {
+        status.textContent = "Report failed. Check the text and try again.";
+      }
+    });
 }
 
 boot();
