@@ -1,0 +1,16 @@
+diff --git a/package.json b/package.json
+index 1728bc845b98498af1ded3a6b6fed05588513edf..d2f7e01c907c806b9a6c59547aeaab1c01f18dd7 100644
+--- a/package.json
++++ b/package.json
+@@ -4,7 +4,10 @@
+   "private": true,
+   "description": "Opinionated Oxlint rules that reject low-evidence TypeScript and JavaScript patterns.",
+   "type": "module",
+-  "exports": "./src/index.ts",
++  "exports": {
++    ".": "./src/index.ts",
++    "./effect": "./src/effect/index.ts"
++  },
+   "files": [
+     "src"
+   ],

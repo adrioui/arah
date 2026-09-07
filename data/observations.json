@@ -1,0 +1,91 @@
+{
+  "coverages": [
+    {
+      "source": "flood",
+      "polygon": [
+        { "lat": -6.32, "lon": 106.68 },
+        { "lat": -6.32, "lon": 106.76 },
+        { "lat": -6.24, "lon": 106.76 },
+        { "lat": -6.24, "lon": 106.68 }
+      ],
+      "state": "covered"
+    },
+    {
+      "source": "flood",
+      "polygon": [
+        { "lat": -6.3, "lon": 106.74 },
+        { "lat": -6.3, "lon": 106.83 },
+        { "lat": -6.2, "lon": 106.83 },
+        { "lat": -6.2, "lon": 106.74 }
+      ],
+      "state": "covered"
+    },
+    {
+      "source": "bmkg",
+      "polygon": [
+        { "lat": -6.35, "lon": 106.6 },
+        { "lat": -6.35, "lon": 106.85 },
+        { "lat": -6.2, "lon": 106.85 },
+        { "lat": -6.2, "lon": 106.6 }
+      ],
+      "state": "covered"
+    },
+    {
+      "source": "air",
+      "polygon": [
+        { "lat": -6.35, "lon": 106.6 },
+        { "lat": -6.35, "lon": 106.85 },
+        { "lat": -6.2, "lon": 106.85 },
+        { "lat": -6.2, "lon": 106.6 }
+      ],
+      "state": "covered"
+    }
+  ],
+  "observations": [
+    {
+      "id": "flood-cipete-001",
+      "source": "flood",
+      "severity": "moderate",
+      "polygon": [
+        { "lat": -6.269, "lon": 106.756 },
+        { "lat": -6.269, "lon": 106.764 },
+        { "lat": -6.263, "lon": 106.764 },
+        { "lat": -6.263, "lon": 106.756 }
+      ],
+      "minutesAgo": 25,
+      "validForMinutes": 120,
+      "coverage": "covered",
+      "note": "25 cm standing water reported on Jl. Cipete Raya"
+    },
+    {
+      "id": "closure-vila-melati-001",
+      "source": "closure",
+      "severity": "severe",
+      "polygon": [
+        { "lat": -6.2715, "lon": 106.7465 },
+        { "lat": -6.2715, "lon": 106.7515 },
+        { "lat": -6.2665, "lon": 106.7515 },
+        { "lat": -6.2665, "lon": 106.7465 }
+      ],
+      "minutesAgo": 60,
+      "validForMinutes": 300,
+      "coverage": "covered",
+      "note": "road closed for resurfacing near Vila Melati"
+    },
+    {
+      "id": "bmkg-tangsel-001",
+      "source": "bmkg",
+      "severity": "info",
+      "polygon": [
+        { "lat": -6.32, "lon": 106.68 },
+        { "lat": -6.32, "lon": 106.76 },
+        { "lat": -6.24, "lon": 106.76 },
+        { "lat": -6.24, "lon": 106.68 }
+      ],
+      "minutesAgo": 40,
+      "validForMinutes": 180,
+      "coverage": "covered",
+      "note": "light rain possible after 16:00 local"
+    }
+  ]
+}

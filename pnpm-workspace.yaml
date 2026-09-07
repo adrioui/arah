@@ -1,0 +1,2 @@
+patchedDependencies:
+  oxlint-plugin-anti-slop@0.1.2: patches/oxlint-plugin-anti-slop@0.1.2.patch

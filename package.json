@@ -1,0 +1,33 @@
+{
+  "name": "arah",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "node --import tsx ./node_modules/oxlint/bin/oxlint",
+    "test": "vitest run",
+    "start": "node --import tsx src/main.ts"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-rc.112",
+    "effect": "4.0.0-rc.112"
+  },
+  "devDependencies": {
+    "@oxlint/plugins": "1.81.0",
+    "@types/node": "^22.7.0",
+    "fast-check": "^3.23.0",
+    "oxlint": "1.81.0",
+    "oxlint-plugin-anti-slop": "github:dmmulroy/anti-slop#e8c4880471b23ab7f216fba7b27d173a6ef07d4c",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "packageManager": "pnpm@10.15.1",
+  "pnpm": {
+    "patchedDependencies": {
+      "oxlint-plugin-anti-slop@0.1.2": "patches/oxlint-plugin-anti-slop@0.1.2.patch"
+    }
+  }
+}
