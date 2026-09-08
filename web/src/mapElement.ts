@@ -1,5 +1,6 @@
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 type LngLatTuple = [number, number];
 type LineGeometry = { readonly type: "LineString"; readonly coordinates: Array<LngLatTuple> };
@@ -152,6 +153,7 @@ class ArahMapElement extends HTMLElement {
     if (this.#map !== null) {
       return;
     }
+    maplibregl.setWorkerUrl(maplibreWorkerUrl);
     this.#map = new maplibregl.Map({
       container: this,
       style: STYLE_URL,
