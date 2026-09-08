@@ -163,7 +163,7 @@ class ArahMapElement extends HTMLElement {
     this.#map.addControl(
       new maplibregl.NavigationControl({ visualizePitch: true }),
     );
-    this.render();
+    this.#map.on("load", () => this.render());
   }
 
   disconnectedCallback(): void {
@@ -190,7 +190,7 @@ class ArahMapElement extends HTMLElement {
   }
 
   private render(): void {
-    if (this.#map === null) {
+    if (this.#map === null || this.#map.loaded() === false) {
       return;
     }
     this.renderRoutes(this.#routes);
