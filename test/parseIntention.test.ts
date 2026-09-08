@@ -96,6 +96,22 @@ describe("tableParseToRouteRequest", () => {
     });
   });
 
+  it("parses i want go to smiljan coffee at bintaro", () => {
+    expect(
+      tableParseToRouteRequest(
+        "I want go to Smiljan Coffee at Bintaro",
+        DEPART,
+        null,
+      ),
+    ).toEqual({
+      kind: "go",
+      origin: "home",
+      destination: "smiljan coffee at bintaro",
+      departAt: DEPART,
+      night: false,
+    });
+  });
+
   it("rejects empty and unreadable text", () => {
     expect(tableParseToRouteRequest("", DEPART, null)).toBeNull();
     expect(tableParseToRouteRequest("asdf", DEPART, null)).toBeNull();

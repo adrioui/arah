@@ -10,8 +10,8 @@ This file is the shared vocabulary for the arah restart. The code owns the exact
 
 ## Parse terms
 
-- **Table parser.** The deterministic parser in `src/parseIntention.ts`. It matches the golden utterance patterns and produces an `LlmRideParse` directly. It runs with no `LanguageModel` requirement.
-- **LLM parse.** The language-model path. It calls `model.generateObject` with schema `LlmRideParse`, then converts to `RouteRequest`. It needs a `LanguageModel` service in the Effect context.
+- **LLM parse.** The primary language-model path. It calls `model.generateObject` with schema `LlmRideParse`. This is JSON-schema constrained structured output generation as studied in [Meaning Typed Prompting](https://arxiv.org/abs/2410.18146), [TOON vs JSON](https://arxiv.org/abs/2603.03306), and [Structured Output Benchmark](https://arxiv.org/abs/2604.25359). It needs a `LanguageModel` service in the Effect context.
+- **Table parser.** The deterministic fallback in `src/parseIntention.ts`. It only runs when the model key is missing or `AiUnavailable` escapes. It produces an `LlmRideParse` directly with no `LanguageModel` requirement.
 - **Escape.** A node failure route that keeps the planner alive. `AiUnavailable` escapes to the table parser. Live weather misses become `unavailable` coverage instead of blocking the ride.
 - **Sabotage path.** The plan uses this word once as "escape" in the graph. Treat sabotage and escape as the same thing here.
 

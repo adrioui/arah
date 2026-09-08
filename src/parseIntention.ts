@@ -159,6 +159,12 @@ function normalize(raw: string): string {
   return clean(raw.toLowerCase().replace(/\b(night|malam)\b/g, " "));
 }
 
+function stripLeadingFillers(raw: string): string {
+  return clean(
+    raw.replace(/^(?:i\s+)?(?:want(?:\s+to)?|wanna|please|tolong)\s+/, ""),
+  );
+}
+
 /** Deterministic parser. Pure and service-free. Null means unreadable. */
 export function tableParseToRouteRequest(
   rawText: string,
@@ -170,7 +176,7 @@ export function tableParseToRouteRequest(
     return null;
   }
   const night = nightOverride ?? /\b(night|malam)\b/i.test(text);
-  let work = normalize(text);
+  let work = stripLeadingFillers(normalize(text));
   if (work.length === 0) {
     return null;
   }
@@ -228,6 +234,8 @@ export function parseRideIntentionTables(
 function llmPrompt(text: string): string {
   return `Turn this rider's ride intention into a structured object.
 Rules:
+- The rider may add filler like "i want to" or "please". Ignore the filler and extract the ride.
+- Area qualifiers like "at bintaro" belong to the place, not the kind. Keep them inside destination or venue.
 - "go" means point-to-point. Use kind "go" with origin and destination, never a venue.
 - "train" means loops at a venue. Use kind "train" with venue, session, and minutes.
 - session is only long, tempo, brisk, or recovery. Default missing session to long and missing minutes to 150.

@@ -232,7 +232,11 @@ export function parseRequestBody(body: string): RouteRequest | null {
 
 /** Normalize a place query string for registry lookup. */
 export function normalizePlaceQuery(raw: string): string {
-  return raw.toLowerCase().trim().replace(/\s+/g, " ");
+  return raw
+    .toLowerCase()
+    .replace(/\b(at|in|around|near)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** True when the input is already coordinates. */
