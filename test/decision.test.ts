@@ -409,7 +409,7 @@ describe("DecisionOutput JSON", () => {
           laneKind: "unknown",
           lighting: "unknown",
           mapSnapshotId: "snap",
-          routeSource: "osrm",
+          routeSource: "gpx",
           venueId: null,
         },
       ],
@@ -430,7 +430,7 @@ describe("DecisionOutput JSON", () => {
         },
         destination: null,
       },
-      routeSources: ["osrm"],
+      routeSources: ["gpx"],
     };
     const exit = Schema.decodeUnknownExit(DecisionOutput)(wire);
     expect(Exit.isSuccess(exit)).toBe(true);

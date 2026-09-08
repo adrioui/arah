@@ -25,7 +25,8 @@ import {
   IntentionUnreadable,
   parseIntentionWithTables,
 } from "./parseIntention.js";
-import { GraphHopperConfig, goCandidates, trainCandidates } from "./router.js";
+import { goCandidates, trainCandidates } from "./router.js";
+import { RouteCatalog, RouterUnavailable } from "./routeCatalog.js";
 
 function isLiveWeather(): boolean {
   return (process.env["ARAH_LIVE"] ?? "0") === "1";
@@ -139,12 +140,12 @@ export class PlanRide extends Context.Service<
   {
     readonly plan: (
       request: RouteRequest,
-    ) => Effect.Effect<DecisionOutput, PlaceNotFound>;
+    ) => Effect.Effect<DecisionOutput, PlaceNotFound | RouterUnavailable>;
     readonly planIntention: (
       draft: IntentionDraft,
     ) => Effect.Effect<
       DecisionOutput,
-      IntentionUnreadable | PlaceNotFound,
+      IntentionUnreadable | PlaceNotFound | RouterUnavailable,
       LanguageModel.LanguageModel
     >;
   }
@@ -155,10 +156,14 @@ export class PlanRide extends Context.Service<
       const places = yield* Places;
       const resolver = yield* PlaceResolver;
       const state = yield* ObservationState;
+      const catalog = yield* RouteCatalog;
 
       const executePlan = (
         request: RouteRequest,
-      ): Effect.Effect<DecisionOutput, PlaceNotFound> =>
+      ): Effect.Effect<
+        DecisionOutput,
+        PlaceNotFound | RouterUnavailable
+      > =>
         Effect.gen(function* () {
           const nowMs = yield* Clock.currentTimeMillis;
           const homePoint: GeoPoint = {
@@ -194,8 +199,7 @@ export class PlanRide extends Context.Service<
               : yield* goCandidates(
                   origin,
                   destination!,
-                  places.snapshotId,
-                );
+                ).pipe(Effect.provideService(RouteCatalog, catalog));
 
           const decision = (() => {
             if (request.kind === "train") {
@@ -254,14 +258,13 @@ export class PlanRide extends Context.Service<
           };
         }).pipe(
           Effect.provide(FetchHttpClient.layer),
-          Effect.provide(GraphHopperConfig.fromEnv),
         );
 
       const planIntention = (
         draft: IntentionDraft,
       ): Effect.Effect<
         DecisionOutput,
-        IntentionUnreadable | PlaceNotFound,
+        IntentionUnreadable | PlaceNotFound | RouterUnavailable,
         LanguageModel.LanguageModel
       > =>
         Effect.gen(function* () {
@@ -283,5 +286,6 @@ export class PlanRide extends Context.Service<
     Layer.provide(PlaceResolver.layer),
     Layer.provide(Places.layer),
     Layer.provide(ObservationState.layer),
+    Layer.provide(RouteCatalog.layer),
   );
 }

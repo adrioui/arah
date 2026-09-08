@@ -13,8 +13,18 @@ import {
 } from "../domain.js";
 import { IntentionDraft, IntentionUnreadable } from "../parseIntention.js";
 import { PlaceNotFound } from "../placeResolve.js";
+import { RouterUnavailable } from "../routeCatalog.js";
 
-const PlanError = Schema.Union([PlaceNotFound, IntentionUnreadable]).annotate({
+const DecideError = Schema.Union([PlaceNotFound, RouterUnavailable]).annotate({
+  httpApiStatus: 422,
+});
+export type DecideError = Schema.Schema.Type<typeof DecideError>;
+
+const PlanError = Schema.Union([
+  PlaceNotFound,
+  IntentionUnreadable,
+  RouterUnavailable,
+]).annotate({
   httpApiStatus: 422,
 });
 export type PlanError = Schema.Schema.Type<typeof PlanError>;
@@ -54,7 +64,7 @@ export class RidesApiGroup extends HttpApiGroup.make("rides")
     HttpApiEndpoint.post("decide", "/decide", {
       payload: RouteRequest,
       success: DecisionOutput,
-      error: PlaceNotFound,
+      error: DecideError,
     }),
   )
   .add(

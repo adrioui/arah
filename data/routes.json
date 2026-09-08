@@ -6,14 +6,38 @@
       "name": "Binloop short loop",
       "kind": "loop",
       "points": [
-        { "lat": -6.2842, "lon": 106.7125 },
-        { "lat": -6.2781, "lon": 106.7198 },
-        { "lat": -6.2795, "lon": 106.7289 },
-        { "lat": -6.2863, "lon": 106.7331 },
-        { "lat": -6.2938, "lon": 106.7294 },
-        { "lat": -6.2961, "lon": 106.7203 },
-        { "lat": -6.2912, "lon": 106.7132 },
-        { "lat": -6.2842, "lon": 106.7125 }
+        {
+          "lat": -6.2842,
+          "lon": 106.7125
+        },
+        {
+          "lat": -6.2781,
+          "lon": 106.7198
+        },
+        {
+          "lat": -6.2795,
+          "lon": 106.7289
+        },
+        {
+          "lat": -6.2863,
+          "lon": 106.7331
+        },
+        {
+          "lat": -6.2938,
+          "lon": 106.7294
+        },
+        {
+          "lat": -6.2961,
+          "lon": 106.7203
+        },
+        {
+          "lat": -6.2912,
+          "lon": 106.7132
+        },
+        {
+          "lat": -6.2842,
+          "lon": 106.7125
+        }
       ],
       "distanceKm": 28.4,
       "climbM": 120,
@@ -26,15 +50,42 @@
       "name": "Binloop extended loop",
       "kind": "loop",
       "points": [
-        { "lat": -6.2842, "lon": 106.7125 },
-        { "lat": -6.272, "lon": 106.718 },
-        { "lat": -6.265, "lon": 106.73 },
-        { "lat": -6.269, "lon": 106.749 },
-        { "lat": -6.283, "lon": 106.752 },
-        { "lat": -6.296, "lon": 106.748 },
-        { "lat": -6.302, "lon": 106.735 },
-        { "lat": -6.2961, "lon": 106.7203 },
-        { "lat": -6.2842, "lon": 106.7125 }
+        {
+          "lat": -6.2842,
+          "lon": 106.7125
+        },
+        {
+          "lat": -6.272,
+          "lon": 106.718
+        },
+        {
+          "lat": -6.265,
+          "lon": 106.73
+        },
+        {
+          "lat": -6.269,
+          "lon": 106.749
+        },
+        {
+          "lat": -6.283,
+          "lon": 106.752
+        },
+        {
+          "lat": -6.296,
+          "lon": 106.748
+        },
+        {
+          "lat": -6.302,
+          "lon": 106.735
+        },
+        {
+          "lat": -6.2961,
+          "lon": 106.7203
+        },
+        {
+          "lat": -6.2842,
+          "lon": 106.7125
+        }
       ],
       "distanceKm": 54,
       "climbM": 260,
@@ -47,36 +98,108 @@
       "name": "Pondok Aren to Kemang cafe",
       "kind": "point-to-point",
       "points": [
-        { "lat": -6.2842, "lon": 106.7125 },
-        { "lat": -6.278, "lon": 106.728 },
-        { "lat": -6.272, "lon": 106.744 },
-        { "lat": -6.266, "lon": 106.76 },
-        { "lat": -6.26, "lon": 106.776 },
-        { "lat": -6.256, "lon": 106.79 }
+        {
+          "lat": -6.2842,
+          "lon": 106.7125
+        },
+        {
+          "lat": -6.278,
+          "lon": 106.728
+        },
+        {
+          "lat": -6.272,
+          "lon": 106.744
+        },
+        {
+          "lat": -6.266,
+          "lon": 106.76
+        },
+        {
+          "lat": -6.26,
+          "lon": 106.776
+        },
+        {
+          "lat": -6.256,
+          "lon": 106.79
+        }
       ],
       "distanceKm": 18.2,
       "climbM": 95,
       "laneKind": "painted",
       "lighting": "lit",
-      "mapSnapshotId": "osm-id-jawa-2026-09-01"
+      "mapSnapshotId": "osm-id-jawa-2026-09-01",
+      "from": "home",
+      "to": "kemang-cafe"
     },
     {
       "id": "bsd-green-loop",
       "name": "BSD green loop",
       "kind": "loop",
       "points": [
-        { "lat": -6.3, "lon": 106.655 },
-        { "lat": -6.295, "lon": 106.662 },
-        { "lat": -6.298, "lon": 106.67 },
-        { "lat": -6.305, "lon": 106.668 },
-        { "lat": -6.307, "lon": 106.659 },
-        { "lat": -6.3, "lon": 106.655 }
+        {
+          "lat": -6.3,
+          "lon": 106.655
+        },
+        {
+          "lat": -6.295,
+          "lon": 106.662
+        },
+        {
+          "lat": -6.298,
+          "lon": 106.67
+        },
+        {
+          "lat": -6.305,
+          "lon": 106.668
+        },
+        {
+          "lat": -6.307,
+          "lon": 106.659
+        },
+        {
+          "lat": -6.3,
+          "lon": 106.655
+        }
       ],
       "distanceKm": 22,
       "climbM": 80,
       "laneKind": "unknown",
       "lighting": "unknown",
       "mapSnapshotId": "osm-id-jawa-2026-09-01"
+    },
+    {
+      "id": "pondok-aren-oksigasi",
+      "name": "Pondok Aren to Oksigasi Space",
+      "kind": "point-to-point",
+      "points": [
+        {
+          "lat": -6.2842,
+          "lon": 106.7125
+        },
+        {
+          "lat": -6.278,
+          "lon": 106.726
+        },
+        {
+          "lat": -6.269,
+          "lon": 106.748
+        },
+        {
+          "lat": -6.258,
+          "lon": 106.77
+        },
+        {
+          "lat": -6.2448,
+          "lon": 106.7996
+        }
+      ],
+      "distanceKm": 10.6,
+      "climbM": 70,
+      "laneKind": "unknown",
+      "lighting": "unknown",
+      "mapSnapshotId": "gpx-jabodetabek-2026-09-07",
+      "from": "home",
+      "to": "oksigasi"
     }
   ]
 }
