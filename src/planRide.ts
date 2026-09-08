@@ -25,7 +25,7 @@ import {
   IntentionUnreadable,
   parseIntentionWithTables,
 } from "./parseIntention.js";
-import { goCandidates, trainCandidates } from "./router.js";
+import { goCandidates, GraphHopperConfig, trainCandidates } from "./router.js";
 import { RouteCatalog, RouterUnavailable } from "./routeCatalog.js";
 
 function isLiveWeather(): boolean {
@@ -258,6 +258,7 @@ export class PlanRide extends Context.Service<
           };
         }).pipe(
           Effect.provide(FetchHttpClient.layer),
+          Effect.provide(GraphHopperConfig.fromEnv),
         );
 
       const planIntention = (

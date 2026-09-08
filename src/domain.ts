@@ -79,7 +79,7 @@ export const CandidateRoute = Schema.Struct({
   laneKind: Schema.Literals(["protected", "painted", "shared", "unknown"]),
   lighting: Schema.Literals(["lit", "unlit", "unknown"]),
   mapSnapshotId: Schema.String,
-  routeSource: Schema.Literals(["lushu", "gpx", "synthetic"]),
+  routeSource: Schema.Literals(["lushu", "gpx", "graphhopper", "osrm", "synthetic"]),
   venueId: jsonOptional(Schema.String),
 });
 export type CandidateRoute = Schema.Schema.Type<typeof CandidateRoute>;

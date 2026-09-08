@@ -17,8 +17,10 @@ This file is the shared vocabulary for the arah restart. The code owns the exact
 
 ## Route terms
 
-- **Curated GPX.** The Go router. Point-to-point rides read fixed geometry from `data/routes.json`. No live routing engine runs in this deploy.
-- **GraphHopper.** Lives outside the Worker-shaped deploy. It is an offline tool for producing future GPX, not a request-time dependency.
+- **GraphHopper.** The live Go router of choice. Bike profile HTTP service at `GRAPHHOPPER_URL`.
+- **OSRM fallback.** Public OSRM cycling used when GraphHopper is not configured or fails.
+- **Curated GPX fallback.** Fixed geometry from `data/routes.json` for known pairs when both live engines fail.
+- **Direct fallback.** A straight two-point line used when every other router fails.
 - **Lushu.** The curated static loops that Train rides use. They are not generated per ride.
 - **Candidate route.** A concrete ridable geometry with distance, climb, lane, lighting, and a `routeSource` literal.
 

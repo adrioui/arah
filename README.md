@@ -55,7 +55,7 @@ ruleset (patched via `patches/`): no `unknown` params or returns, no runtime
 
 ## Open decisions
 
-Router is curated GPX, not a live engine. GraphHopper stays outside the
-Worker-shaped future deploy. BMKG live parsing is unwritten, fixtures carry
-the weather signal. Feedback is a local append-only file, not a moderated
-queue.
+Go routing is a ladder. GraphHopper runs first, OSRM second, curated GPX
+third, and a straight line last. BMKG live parsing is unwritten, fixtures
+carry the weather signal. Feedback is a local append-only file, not a
+moderated queue.
