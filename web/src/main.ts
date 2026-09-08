@@ -1,4 +1,4 @@
-import { Effect, Schema, String } from "effect";
+import { Effect, Exit, Schema, String } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import { DecisionOutput, type Verdict } from "@arah/domain";
 import {
@@ -29,6 +29,15 @@ const Health = Schema.Struct({
   online: Schema.Boolean,
 });
 type Health = typeof Health.Type;
+
+const ServerPlanError = Schema.Struct({
+  _tag: Schema.Literals([
+    "IntentionUnreadable",
+    "PlaceNotFound",
+    "RouterUnavailable",
+  ]),
+  query: Schema.optional(Schema.String),
+});
 
 const DecisionAsyncData = AsyncData.Schema(DecisionOutput, Schema.String);
 const HealthAsyncData = AsyncData.Schema(Health, Schema.String);
@@ -135,9 +144,27 @@ const failedWithStatus = (
   body: string,
 ): Message => {
   if (response.status === 422) {
+    const exit = Schema.decodeUnknownExit(
+      Schema.fromJsonString(ServerPlanError),
+    )(body);
+    if (Exit.isSuccess(exit)) {
+      if (exit.value._tag === "PlaceNotFound") {
+        return Message.FailedPlan({
+          error: `No place found for "${exit.value.query ?? "that place"}". Try a registry name or coordinates.`,
+        });
+      }
+      if (exit.value._tag === "RouterUnavailable") {
+        return Message.FailedPlan({
+          error: "Parsed fine, but no curated ride exists for that pair yet.",
+        });
+      }
+      return Message.FailedPlan({
+        error:
+          "That ride doesn't parse. Try \"long ride at alsut 150 min\" or \"go to oksigasi\".",
+      });
+    }
     return Message.FailedPlan({
-      error:
-        "That ride doesn't parse. Try \"long ride at alsut 150 min\" or \"go to oksigasi\".",
+      error: body.length > 0 ? body.slice(0, 200) : `Server returned ${response.status}`,
     });
   }
   return Message.FailedPlan({
