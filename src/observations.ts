@@ -5,6 +5,7 @@ import {
   Exit,
   FileSystem,
   Layer,
+  Schedule,
   Schema,
 } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
@@ -41,6 +42,16 @@ const FloodPayload = Schema.Struct({
 });
 type FloodPayload = Schema.Schema.Type<typeof FloodPayload>;
 
+const OpenMeteoPayload = Schema.Struct({
+  hourly: Schema.Struct({
+    time: Schema.Array(Schema.String),
+    precipitation_probability: Schema.optional(Schema.Array(Schema.Number)),
+    weathercode: Schema.optional(Schema.Array(Schema.Number)),
+    windspeed_10m: Schema.optional(Schema.Array(Schema.Number)),
+  }),
+});
+type OpenMeteoPayload = Schema.Schema.Type<typeof OpenMeteoPayload>;
+
 export class ObservationsReadError extends Schema.TaggedError<ObservationsReadError>()(
   "ObservationsReadError",
   { path: Schema.String },
@@ -51,7 +62,17 @@ export class ObservationsParseError extends Schema.TaggedError<ObservationsParse
   { path: Schema.String },
 ) {}
 
-export type Provenance = "fixture" | "live-peta";
+export class FloodUnavailable extends Schema.TaggedError<FloodUnavailable>()(
+  "FloodUnavailable",
+  { detail: Schema.String },
+) {}
+
+export class NowcastUnavailable extends Schema.TaggedError<NowcastUnavailable>()(
+  "NowcastUnavailable",
+  { detail: Schema.String },
+) {}
+
+export type Provenance = "fixture" | "live-peta" | "live-open-meteo";
 
 export interface ObservationSnapshot {
   readonly observations: ReadonlyArray<Observation>;
@@ -62,7 +83,17 @@ export interface ObservationSnapshot {
 const OBSERVATIONS_PATH = "data/observations.json";
 const FLOOD_URL =
   "https://data.petabencana.id/floods?admin=ID-JK&minimum_state=1";
+const NOWCAST_URL = "https://api.open-meteo.com/v1/forecast";
 const MINUTE_MS = 60_000;
+
+function fetchWithRetry<A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> {
+  return Effect.retry(effect, {
+    times: 1,
+    schedule: Schedule.spaced("250 millis"),
+  });
+}
 
 /** Pure materialization. Relative fixture times become absolute claims. */
 export function materialize(
@@ -125,26 +156,144 @@ function floodFeatureToObservation(
   };
 }
 
-/** Live PetaBencana fetch. Empty when the network or the payload fails. */
-function fetchLiveFlood(
+/** Live PetaBencana fetch. Fails with FloodUnavailable so callers can escape. */
+export function fetchFlood(
   nowMs: number,
-): Effect.Effect<ReadonlyArray<Observation>, never, HttpClient.HttpClient> {
+): Effect.Effect<
+  ReadonlyArray<Observation>,
+  FloodUnavailable,
+  HttpClient.HttpClient
+> {
   return Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    const fetched = yield* Effect.exit(
+    const fetched = yield* fetchWithRetry(
       client.get(FLOOD_URL).pipe(
         Effect.flatMap((response) =>
           HttpClientResponse.schemaBodyJson(FloodPayload)(response),
         ),
-        Effect.timeout(8000),
+        Effect.timeout(8_000),
       ),
-    );
-    if (Exit.isSuccess(fetched) === false) {
-      return [];
-    }
-    return fetched.value.features
+    ).pipe(Effect.mapError(() => new FloodUnavailable({
+      detail: "PetaBencana flood request failed",
+    })));
+    return fetched.features
       .map((feature, index) => floodFeatureToObservation(feature, index, nowMs))
       .filter((observation) => observation !== null);
+  });
+}
+
+function weathercodeRain(code: number): boolean {
+  return (
+    code >= 51 && code <= 67 ||
+    code >= 80 && code <= 82 ||
+    code === 95 || code === 96 || code === 99
+  );
+}
+
+function nowcastSeverity(
+  precipitationProbability: number,
+  weathercode: number,
+  windSpeedKmh: number,
+): Observation["severity"] {
+  if (precipitationProbability >= 70 && weathercodeRain(weathercode)) {
+    return "severe";
+  }
+  if (
+    precipitationProbability >= 40 && weathercodeRain(weathercode) ||
+    windSpeedKmh >= 30
+  ) {
+    return "moderate";
+  }
+  return "info";
+}
+
+function bboxAround(point: GeoPoint, radiusDeg: number): Array<GeoPoint> {
+  return [
+    { lat: point.lat + radiusDeg, lon: point.lon - radiusDeg },
+    { lat: point.lat + radiusDeg, lon: point.lon + radiusDeg },
+    { lat: point.lat - radiusDeg, lon: point.lon + radiusDeg },
+    { lat: point.lat - radiusDeg, lon: point.lon - radiusDeg },
+  ];
+}
+
+export function nowcastObservation(
+  point: GeoPoint,
+  payload: OpenMeteoPayload,
+  nowMs: number,
+): Observation | null {
+  const hourly = payload.hourly;
+  const endIndex = Math.min(hourly.time.length, 6) - 1;
+  if (endIndex < 0) {
+    return null;
+  }
+  let worstSeverity: Observation["severity"] = "info";
+  let worstNote = "next hours look rideable";
+  let worstAt = hourly.time[0] ?? new Date(nowMs).toISOString();
+  for (let i = 0; i <= endIndex; i = i + 1) {
+    const precipitation = hourly.precipitation_probability?.[i] ?? 0;
+    const weathercode = hourly.weathercode?.[i] ?? 0;
+    const wind = hourly.windspeed_10m?.[i] ?? 0;
+    const severity = nowcastSeverity(precipitation, weathercode, wind);
+    const order: ReadonlyArray<Observation["severity"]> = [
+      "info",
+      "moderate",
+      "severe",
+    ];
+    if (order.indexOf(severity) > order.indexOf(worstSeverity)) {
+      worstSeverity = severity;
+      worstAt = hourly.time[i] ?? worstAt;
+      worstNote =
+        severity === "severe"
+          ? `rain likely in the next hours at ${worstAt}`
+          : severity === "moderate"
+            ? `showery or windy in the next hours at ${worstAt}`
+            : `next hours look rideable at ${worstAt}`;
+    }
+  }
+  return {
+    id: Schema.decodeSync(EvidenceId)("open-meteo-nowcast"),
+    source: "nowcast",
+    severity: worstSeverity,
+    polygon: bboxAround(point, 0.015),
+    observedAt: new Date(nowMs).toISOString(),
+    expiresAt: new Date(nowMs + 6 * 60 * MINUTE_MS).toISOString(),
+    coverage: "covered",
+    note: worstNote,
+  };
+}
+
+/** Live Open-Meteo hourly forecast at one point. */
+export function fetchNowcast(
+  point: GeoPoint,
+  nowMs: number,
+): Effect.Effect<Observation, NowcastUnavailable, HttpClient.HttpClient> {
+  return Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const params = new URLSearchParams({
+      latitude: String(point.lat),
+      longitude: String(point.lon),
+      hourly:
+        "precipitation_probability,weathercode,windspeed_10m",
+      forecast_hours: "6",
+      timezone: "auto",
+    });
+    const fetched = yield* fetchWithRetry(
+      client.get(`${NOWCAST_URL}?${params.toString()}`).pipe(
+        Effect.flatMap((response) =>
+          HttpClientResponse.schemaBodyJson(OpenMeteoPayload)(response),
+        ),
+        Effect.timeout(8_000),
+      ),
+    ).pipe(Effect.mapError(() => new NowcastUnavailable({
+      detail: "Open-Meteo nowcast request failed",
+    })));
+    const observation = nowcastObservation(point, fetched, nowMs);
+    if (observation === null) {
+      return yield* new NowcastUnavailable({
+        detail: "Open-Meteo returned no hourly frames",
+      });
+    }
+    return observation;
   });
 }
 
@@ -170,34 +319,12 @@ export class ObservationState extends Context.Service<
         return yield* new ObservationsParseError({ path: OBSERVATIONS_PATH });
       }
       const nowMs = yield* Clock.currentTimeMillis;
-      const liveFlag = yield* Effect.sync(() => process.env["ARAH_LIVE"] ?? "");
-      if (liveFlag !== "1") {
-        return materialize(
-          exit.value.observations,
-          exit.value.coverages,
-          "fixture",
-          nowMs,
-        );
-      }
-      const client = yield* HttpClient.HttpClient;
-      const live = yield* fetchLiveFlood(nowMs).pipe(
-        Effect.provideService(HttpClient.HttpClient, client),
-      );
-      if (live.length === 0) {
-        return materialize(
-          exit.value.observations,
-          exit.value.coverages,
-          "fixture",
-          nowMs,
-        );
-      }
-      const base = materialize(
+      return materialize(
         exit.value.observations,
         exit.value.coverages,
-        "live-peta",
+        "fixture",
         nowMs,
       );
-      return { ...base, observations: [...base.observations, ...live] };
     }),
   );
 }

@@ -1,7 +1,6 @@
 import type {
   CandidateRoute,
   CoverageEntry,
-  DecisionOutput,
   GeoPoint,
   Observation,
   RankedRoute,
@@ -179,11 +178,16 @@ export interface DecideInput {
   readonly mapSnapshotId: string;
 }
 
-export function decide(input: DecideInput, nowMs: number): DecisionOutput {
-  const wantKind = input.request.kind === "train" ? "loop" : "point-to-point";
+export interface DecideOutput {
+  readonly intent: RouteRequest["kind"];
+  readonly ranked: ReadonlyArray<RankedRoute>;
+  readonly mapSnapshotId: string;
+  readonly decidedAt: string;
+}
+
+export function decide(input: DecideInput, nowMs: number): DecideOutput {
   const night = input.request.night;
   const ranked = input.routes
-    .filter((route) => route.kind === wantKind)
     .map((route) =>
       assessCandidate(
         {

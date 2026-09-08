@@ -1,0 +1,117 @@
+{
+  "snapshotId": "places-jabodetabek-2026-09-07",
+  "home": {
+    "id": "home",
+    "label": "Home, Pondok Aren",
+    "lat": -6.2842,
+    "lon": 106.7125,
+    "aliases": ["home", "pondok aren", "palem kuning"]
+  },
+  "venues": [
+    {
+      "id": "alsut-loop",
+      "label": "Alsut loop",
+      "lat": -6.241,
+      "lon": 106.651,
+      "aliases": ["alsut", "alsut loop", "alam sutera", "alam sutera loop"],
+      "loops": [
+        {
+          "id": "alsut-short",
+          "name": "Alsut short loop",
+          "points": [
+            { "lat": -6.241, "lon": 106.651 },
+            { "lat": -6.235, "lon": 106.658 },
+            { "lat": -6.238, "lon": 106.668 },
+            { "lat": -6.246, "lon": 106.665 },
+            { "lat": -6.248, "lon": 106.655 },
+            { "lat": -6.241, "lon": 106.651 }
+          ],
+          "distanceKm": 11.5,
+          "climbM": 45,
+          "laneKind": "painted",
+          "lighting": "lit"
+        },
+        {
+          "id": "alsut-extended",
+          "name": "Alsut extended loop",
+          "points": [
+            { "lat": -6.241, "lon": 106.651 },
+            { "lat": -6.232, "lon": 106.662 },
+            { "lat": -6.228, "lon": 106.675 },
+            { "lat": -6.238, "lon": 106.682 },
+            { "lat": -6.252, "lon": 106.678 },
+            { "lat": -6.255, "lon": 106.662 },
+            { "lat": -6.248, "lon": 106.652 },
+            { "lat": -6.241, "lon": 106.651 }
+          ],
+          "distanceKm": 18.2,
+          "climbM": 90,
+          "laneKind": "shared",
+          "lighting": "unknown"
+        }
+      ]
+    },
+    {
+      "id": "binloop",
+      "label": "Binloop",
+      "lat": -6.2842,
+      "lon": 106.7125,
+      "aliases": ["binloop", "bintaro loop", "bin loop"],
+      "loops": [
+        {
+          "id": "binloop-short",
+          "name": "Binloop short loop",
+          "points": [
+            { "lat": -6.2842, "lon": 106.7125 },
+            { "lat": -6.2781, "lon": 106.7198 },
+            { "lat": -6.2795, "lon": 106.7289 },
+            { "lat": -6.2863, "lon": 106.7331 },
+            { "lat": -6.2938, "lon": 106.7294 },
+            { "lat": -6.2961, "lon": 106.7203 },
+            { "lat": -6.2912, "lon": 106.7132 },
+            { "lat": -6.2842, "lon": 106.7125 }
+          ],
+          "distanceKm": 12.8,
+          "climbM": 55,
+          "laneKind": "painted",
+          "lighting": "lit"
+        },
+        {
+          "id": "binloop-extended",
+          "name": "Binloop extended loop",
+          "points": [
+            { "lat": -6.2842, "lon": 106.7125 },
+            { "lat": -6.272, "lon": 106.718 },
+            { "lat": -6.265, "lon": 106.73 },
+            { "lat": -6.269, "lon": 106.749 },
+            { "lat": -6.283, "lon": 106.752 },
+            { "lat": -6.296, "lon": 106.748 },
+            { "lat": -6.302, "lon": 106.735 },
+            { "lat": -6.2961, "lon": 106.7203 },
+            { "lat": -6.2842, "lon": 106.7125 }
+          ],
+          "distanceKm": 22.4,
+          "climbM": 120,
+          "laneKind": "shared",
+          "lighting": "unlit"
+        }
+      ]
+    }
+  ],
+  "destinations": [
+    {
+      "id": "oksigasi",
+      "label": "Oksigasi Space",
+      "lat": -6.2448,
+      "lon": 106.7996,
+      "aliases": ["oksigasi", "oksigasi space", "oksigen"]
+    },
+    {
+      "id": "kemang-cafe",
+      "label": "Kemang cafe area",
+      "lat": -6.256,
+      "lon": 106.79,
+      "aliases": ["kemang", "kemang cafe", "cafe kemang"]
+    }
+  ]
+}

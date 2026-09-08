@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import path from "node:path";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
@@ -12,27 +13,27 @@ const ApiRoutes = HttpApiBuilder.layer(ArahApi, {
 
 const DocsRoute = HttpApiScalar.layer(ArahApi, { path: "/docs" });
 
+const WEB_DIST = "web/dist";
+
 const StaticRoutes = HttpRouter.use(
   Effect.fn(function* (router) {
     yield* router.add(
       "GET",
       "/",
-      HttpServerResponse.file("public/index.html", {
+      HttpServerResponse.file(path.join(WEB_DIST, "index.html"), {
         contentType: "text/html; charset=utf-8",
       }),
     );
-    yield* router.add(
-      "GET",
-      "/app.js",
-      HttpServerResponse.file("public/app.js", {
-        contentType: "text/javascript; charset=utf-8",
-      }),
-    );
-    yield* router.add(
-      "GET",
-      "/styles.css",
-      HttpServerResponse.file("public/styles.css", {
-        contentType: "text/css; charset=utf-8",
+    yield* router.add("GET", "/assets/*", (request) =>
+      Effect.gen(function* () {
+        const url = new URL(request.url, "http://localhost");
+        const assetPath = url.pathname.replace(/^\/assets\//, "");
+        if (assetPath.includes("..") || assetPath.length === 0) {
+          return HttpServerResponse.empty({ status: 404 });
+        }
+        return yield* HttpServerResponse.file(
+          path.join(WEB_DIST, "assets", assetPath),
+        );
       }),
     );
   }),

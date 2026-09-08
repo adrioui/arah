@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as fc from "fast-check";
-import { Schema } from "effect";
+import { Exit, Schema } from "effect";
 import {
   assessCandidate,
   decide,
@@ -8,6 +8,7 @@ import {
   pointInPolygon,
   routeTouches,
 } from "../src/decide.js";
+import { fitTrainRanking } from "../src/fit.js";
 import { materialize } from "../src/observations.js";
 import { parseRequestBody } from "../src/domain.js";
 import type {
@@ -19,9 +20,12 @@ import type {
   RouteRequest,
 } from "../src/domain.js";
 import {
+  DecisionOutput,
   EvidenceId as EvidenceIdSchema,
   RouteId as RouteIdSchema,
 } from "../src/domain.js";
+import { trainCandidates } from "../src/router.js";
+import type { RegistryEntry } from "../src/places.js";
 
 function routeId(raw: string): RouteId {
   return Schema.decodeSync(RouteIdSchema)(raw);
@@ -40,6 +44,29 @@ const SQUARE: ReadonlyArray<{ lat: number; lon: number }> = [
   { lat: -6.2, lon: 106.7 },
 ];
 
+const ALSUT_VENUE: RegistryEntry = {
+  id: "alsut-loop",
+  label: "Alsut loop",
+  lat: -6.241,
+  lon: 106.651,
+  aliases: ["alsut", "alsut loop"],
+  loops: [
+    {
+      id: "alsut-short",
+      name: "Alsut short loop",
+      points: [
+        { lat: -6.241, lon: 106.651 },
+        { lat: -6.235, lon: 106.658 },
+        { lat: -6.241, lon: 106.651 },
+      ],
+      distanceKm: 11.5,
+      climbM: 45,
+      laneKind: "painted",
+      lighting: "lit",
+    },
+  ],
+};
+
 function makeRoute(overrides: Partial<CandidateRoute>): CandidateRoute {
   return {
     id: routeId("binloop-short"),
@@ -54,6 +81,7 @@ function makeRoute(overrides: Partial<CandidateRoute>): CandidateRoute {
     laneKind: "painted",
     lighting: "lit",
     mapSnapshotId: "snap-1",
+    routeSource: "lushu",
     ...overrides,
   };
 }
@@ -78,12 +106,58 @@ function makeCoverage(state: CoverageEntry["state"]): CoverageEntry {
 
 const trainRequest: RouteRequest = {
   kind: "train",
+  venue: "alsut loop",
   session: "long",
   minutes: 150,
-  anchor: { lat: -6.2842, lon: 106.7125 },
   departAt: "2026-09-12T05:30:00+07:00",
   night: false,
 };
+
+describe("trainCandidates", () => {
+  it("returns lushu loops for a registry venue", () => {
+    const routes = trainCandidates(
+      {
+        label: ALSUT_VENUE.label,
+        point: { lat: ALSUT_VENUE.lat, lon: ALSUT_VENUE.lon },
+        source: "registry",
+        venueId: ALSUT_VENUE.id,
+      },
+      [ALSUT_VENUE],
+      "snap-1",
+    );
+    expect(routes.length).toBe(1);
+    expect(routes[0]?.routeSource).toBe("lushu");
+    expect(routes[0]?.kind).toBe("loop");
+  });
+});
+
+describe("fitTrainRanking", () => {
+  it("adds lap fit notes for training routes", () => {
+    const routes = trainCandidates(
+      {
+        label: ALSUT_VENUE.label,
+        point: { lat: ALSUT_VENUE.lat, lon: ALSUT_VENUE.lon },
+        source: "registry",
+        venueId: ALSUT_VENUE.id,
+      },
+      [ALSUT_VENUE],
+      "snap-1",
+    );
+    const hazard = decide(
+      {
+        request: trainRequest,
+        routes,
+        observations: [],
+        coverages: [makeCoverage("covered")],
+        mapSnapshotId: "snap-1",
+      },
+      NOW,
+    );
+    const ranked = fitTrainRanking(hazard.ranked, routes, trainRequest);
+    expect(ranked[0]?.suggestedLaps).toBeGreaterThan(0);
+    expect(ranked[0]?.reasons.some((row) => row.startsWith("fit:"))).toBe(true);
+  });
+});
 
 describe("pointInPolygon", () => {
   it("contains an interior point and rejects an exterior one", () => {
@@ -234,26 +308,6 @@ describe("decide", () => {
     };
     expect(decide(input, NOW)).toEqual(decide(input, NOW));
   });
-
-  it("only serves the requested kind", () => {
-    const output = decide(
-      {
-        request: trainRequest,
-        routes: [
-          makeRoute({
-            id: routeId("p"),
-            name: "point",
-            kind: "point-to-point",
-          }),
-        ],
-        observations: [],
-        coverages: [],
-        mapSnapshotId: "snap-1",
-      },
-      NOW,
-    );
-    expect(output.ranked).toEqual([]);
-  });
 });
 
 describe("materialize", () => {
@@ -295,10 +349,27 @@ describe("materialize", () => {
 });
 
 describe("parseRequestBody", () => {
-  it("parses a valid train request and rejects malformed bodies", () => {
+  it("parses train and go requests and rejects malformed bodies", () => {
     expect(parseRequestBody(JSON.stringify(trainRequest))).toEqual(
       trainRequest,
     );
+    expect(
+      parseRequestBody(
+        JSON.stringify({
+          kind: "go",
+          origin: "home",
+          destination: "oksigasi space",
+          departAt: "2026-09-12T07:00:00+07:00",
+          night: false,
+        }),
+      ),
+    ).toEqual({
+      kind: "go",
+      origin: "home",
+      destination: "oksigasi space",
+      departAt: "2026-09-12T07:00:00+07:00",
+      night: false,
+    });
     expect(parseRequestBody("{nope")).toBe(null);
     expect(parseRequestBody(JSON.stringify({ kind: "fly" }))).toBe(null);
   });
@@ -310,5 +381,62 @@ describe("routeTouches", () => {
     expect(
       routeTouches(makeRoute({ points: [{ lat: 0, lon: 0 }] }), SQUARE),
     ).toBe(false);
+  });
+});
+
+describe("DecisionOutput JSON", () => {
+  it("decodes HttpApi payloads that encode missing optionals as null", () => {
+    const wire = {
+      intent: "train",
+      ranked: [
+        {
+          routeId: "alsut-short",
+          routeName: "Alsut short loop",
+          verdict: "allow",
+          reasons: ["ok"],
+          evidenceIds: [],
+          coverage: "covered",
+        },
+      ],
+      routes: [
+        {
+          id: "go-direct",
+          name: "direct",
+          kind: "point-to-point",
+          points: [{ lat: -6.28, lon: 106.71 }],
+          distanceKm: 1,
+          climbM: 0,
+          laneKind: "unknown",
+          lighting: "unknown",
+          mapSnapshotId: "snap",
+          routeSource: "osrm",
+          venueId: null,
+        },
+      ],
+      observations: [],
+      mapSnapshotId: "snap",
+      decidedAt: "2026-09-07T00:00:00.000Z",
+      resolved: {
+        origin: {
+          label: "Home",
+          point: { lat: -6.28, lon: 106.71 },
+          source: "registry",
+        },
+        venue: {
+          label: "Alsut loop",
+          point: { lat: -6.24, lon: 106.65 },
+          source: "registry",
+          venueId: "alsut-loop",
+        },
+        destination: null,
+      },
+      routeSources: ["osrm"],
+    };
+    const exit = Schema.decodeUnknownExit(DecisionOutput)(wire);
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) {
+      expect(exit.value.resolved.destination).toBeNull();
+      expect(exit.value.routes[0]?.venueId).toBeNull();
+    }
   });
 });

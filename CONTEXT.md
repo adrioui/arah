@@ -1,0 +1,38 @@
+# Context terms
+
+This file is the shared vocabulary for the arah restart. The code owns the exact schemas. This file only disambiguates words.
+
+## Utterance terms
+
+- **RideIntention.** The raw sentence a rider types. Untrusted. It exists only at the HTTP and parse boundary.
+- **Utterance.** Same as RideIntention. `"long ride at alsut 150 min"` is an utterance.
+- **Unreadable.** An utterance the parser cannot turn into a RouteRequest. Empty text and `"asdf"` are unreadable. Unreadable is always `IntentionUnreadable`, never a default plan.
+
+## Parse terms
+
+- **Table parser.** The deterministic parser in `src/parseIntention.ts`. It matches the golden utterance patterns and produces an `LlmRideParse` directly. It runs with no `LanguageModel` requirement.
+- **LLM parse.** The language-model path. It calls `model.generateObject` with schema `LlmRideParse`, then converts to `RouteRequest`. It needs a `LanguageModel` service in the Effect context.
+- **Escape.** A node failure route that keeps the planner alive. `AiUnavailable` escapes to the table parser. `RouterUnavailable` escapes to OSRM and then direct.
+- **Sabotage path.** The plan uses this word once as "escape" in the graph. Treat sabotage and escape as the same thing here.
+
+## Route terms
+
+- **GraphHopper.** The primary Go router for this slice. Bike profile, HTTP service at `GRAPHHOPPER_URL`.
+- **OSRM escape.** Public OSRM used only after GraphHopper fails or is not configured.
+- **Direct escape.** A straight two-point line used only after both GraphHopper and OSRM fail.
+- **Lushu.** The curated static loops that Train rides use. They are not generated per ride.
+- **Candidate route.** A concrete ridable geometry with distance, climb, lane, lighting, and a `routeSource` literal.
+
+## Weather terms
+
+- **Nowcast.** Open-Meteo hourly forecast read at ride time for one point. It becomes an `Observation` with `source: "nowcast"` and a small bbox around the origin or venue. This is the real-time weather node.
+- **Flood.** PetaBencana live flood polygons. It is already the live flood adapter.
+- **BMKG bulletin.** The optional slower official bulletin. It may be present or stale, and never gates the plan alone.
+- **Coverage.** A claim about whether a source can see the ride area. `covered`, `not-covered`, `stale`, or `unavailable`.
+- **Unavailable means what it says.** A failed nowcast covers nothing and says `unavailable`. It does not pretend the sky is clear.
+
+## Decision terms
+
+- **DecisionOutput.** The one value the server returns for one plan. It contains ranked routes, candidate geometries, resolved places, and coverage facts.
+- **decide.** The pure ranking function. No IO, no clock. It sorts candidates by verdict and evidence.
+- **Fit.** The training-loop lap math layered on top of decide for Train rides.
