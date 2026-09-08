@@ -112,6 +112,15 @@ describe("tableParseToRouteRequest", () => {
     });
   });
 
+  it("rejects go to with a dangling from", () => {
+    expect(
+      tableParseToRouteRequest("go to oksigasi from", DEPART, null),
+    ).toBeNull();
+    expect(
+      tableParseToRouteRequest("go to from home", DEPART, null),
+    ).toBeNull();
+  });
+
   it("rejects empty and unreadable text", () => {
     expect(tableParseToRouteRequest("", DEPART, null)).toBeNull();
     expect(tableParseToRouteRequest("asdf", DEPART, null)).toBeNull();

@@ -196,6 +196,9 @@ export function tableParseToRouteRequest(
       }
       return { kind: "go", origin, destination, departAt, night };
     }
+    if (/\s+from\s*$/.test(target) || /^from\s+/.test(target)) {
+      return null;
+    }
     return { kind: "go", origin: "home", destination: target, departAt, night };
   }
 
