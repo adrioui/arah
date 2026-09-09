@@ -162,6 +162,7 @@ class ArahMapElement extends HTMLElement {
   #map: maplibregl.Map | null = null;
   #routes: ReadonlyArray<MapRoute> = [];
   #observations: ReadonlyArray<MapObservation> = [];
+  #selected: string = "";
 
   connectedCallback(): void {
     if (this.#map !== null) {
@@ -203,36 +204,83 @@ class ArahMapElement extends HTMLElement {
     return JSON.stringify(this.#observations);
   }
 
+  set selected(value: string) {
+    this.#selected = value;
+    this.render();
+  }
+
+  get selected(): string {
+    return this.#selected;
+  }
+
   private render(): void {
     if (this.#map === null || this.#map.loaded() === false) {
       return;
     }
-    this.renderRoutes(this.#routes);
+    this.renderRoutes(this.#routes, this.#selected);
     this.renderObservations(this.#observations);
     this.fitBounds(this.#routes);
   }
 
-  private renderRoutes(routes: ReadonlyArray<MapRoute>): void {
+  private renderRoutes(routes: ReadonlyArray<MapRoute>, selectedId: string): void {
     const data = routesFeatureCollection(routes);
     const source = this.#map!.getSource<maplibregl.GeoJSONSource>("routes");
     if (source !== undefined) {
       source.setData(data);
+    } else {
+      this.#map!.addSource("routes", { type: "geojson", data });
+      this.#map!.addLayer({
+        id: "route-casing",
+        type: "line",
+        source: "routes",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#0f766e", "line-width": 6, "line-opacity": 0.3 },
+      });
+      this.#map!.addLayer({
+        id: "route-line",
+        type: "line",
+        source: "routes",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#0d9488", "line-width": 4 },
+      });
+    }
+    this.renderSelectedRoute(routes, selectedId);
+  }
+
+  private renderSelectedRoute(routes: ReadonlyArray<MapRoute>, selectedId: string): void {
+    const selected = routes.find((route) => route.id === selectedId);
+    if (selected === undefined) {
+      if (this.#map!.getLayer("route-selected-line") !== undefined) {
+        this.#map!.removeLayer("route-selected-line");
+      }
+      if (this.#map!.getLayer("route-selected-casing") !== undefined) {
+        this.#map!.removeLayer("route-selected-casing");
+      }
+      if (this.#map!.getSource("route-selected") !== undefined) {
+        this.#map!.removeSource("route-selected");
+      }
       return;
     }
-    this.#map!.addSource("routes", { type: "geojson", data });
+    const data = routesFeatureCollection([selected]);
+    const source = this.#map!.getSource<maplibregl.GeoJSONSource>("route-selected");
+    if (source !== undefined) {
+      source.setData(data);
+      return;
+    }
+    this.#map!.addSource("route-selected", { type: "geojson", data });
     this.#map!.addLayer({
-      id: "route-casing",
+      id: "route-selected-casing",
       type: "line",
-      source: "routes",
+      source: "route-selected",
       layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": "#0f766e", "line-width": 8, "line-opacity": 0.35 },
+      paint: { "line-color": "#ea580c", "line-width": 10, "line-opacity": 0.4 },
     });
     this.#map!.addLayer({
-      id: "route-line",
+      id: "route-selected-line",
       type: "line",
-      source: "routes",
+      source: "route-selected",
       layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": "#0d9488", "line-width": 5 },
+      paint: { "line-color": "#ea580c", "line-width": 6 },
     });
   }
 
