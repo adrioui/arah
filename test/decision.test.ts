@@ -8,7 +8,7 @@ import {
   pointInPolygon,
   routeTouches,
 } from "../src/decide.js";
-import { fitTrainRanking } from "../src/fit.js";
+import { rankGoRoutes } from "../src/fit.js";
 import { materialize } from "../src/observations.js";
 import { parseRequestBody } from "../src/domain.js";
 import type {
@@ -24,8 +24,6 @@ import {
   EvidenceId as EvidenceIdSchema,
   RouteId as RouteIdSchema,
 } from "../src/domain.js";
-import { trainCandidates } from "../src/router.js";
-import type { RegistryEntry } from "../src/places.js";
 
 function routeId(raw: string): RouteId {
   return Schema.decodeSync(RouteIdSchema)(raw);
@@ -44,27 +42,12 @@ const SQUARE: ReadonlyArray<{ lat: number; lon: number }> = [
   { lat: -6.2, lon: 106.7 },
 ];
 
-const ALSUT_VENUE: RegistryEntry = {
-  id: "alsut-loop",
-  label: "Alsut loop",
-  lat: -6.241,
-  lon: 106.651,
-  aliases: ["alsut", "alsut loop"],
-  loops: [
-    {
-      id: "alsut-short",
-      name: "Alsut short loop",
-      points: [
-        { lat: -6.241, lon: 106.651 },
-        { lat: -6.235, lon: 106.658 },
-        { lat: -6.241, lon: 106.651 },
-      ],
-      distanceKm: 11.5,
-      climbM: 45,
-      laneKind: "painted",
-      lighting: "lit",
-    },
-  ],
+const goRequest: RouteRequest = {
+  kind: "go",
+  origin: "home",
+  destination: "oksigasi space",
+  departAt: "2026-09-12T05:30:00+07:00",
+  night: false,
 };
 
 function makeRoute(overrides: Partial<CandidateRoute>): CandidateRoute {
@@ -104,58 +87,33 @@ function makeCoverage(state: CoverageEntry["state"]): CoverageEntry {
   return { source: "flood", polygon: [...SQUARE], state };
 }
 
-const trainRequest: RouteRequest = {
-  kind: "train",
-  venue: "alsut loop",
-  session: "long",
-  minutes: 150,
-  departAt: "2026-09-12T05:30:00+07:00",
-  night: false,
-};
 
-describe("trainCandidates", () => {
-  it("returns lushu loops for a registry venue", () => {
-    const routes = trainCandidates(
-      {
-        label: ALSUT_VENUE.label,
-        point: { lat: ALSUT_VENUE.lat, lon: ALSUT_VENUE.lon },
-        source: "registry",
-        venueId: ALSUT_VENUE.id,
-      },
-      [ALSUT_VENUE],
-      "snap-1",
-    );
-    expect(routes.length).toBe(1);
-    expect(routes[0]?.routeSource).toBe("lushu");
-    expect(routes[0]?.kind).toBe("loop");
-  });
-});
-
-describe("fitTrainRanking", () => {
-  it("adds lap fit notes for training routes", () => {
-    const routes = trainCandidates(
-      {
-        label: ALSUT_VENUE.label,
-        point: { lat: ALSUT_VENUE.lat, lon: ALSUT_VENUE.lon },
-        source: "registry",
-        venueId: ALSUT_VENUE.id,
-      },
-      [ALSUT_VENUE],
-      "snap-1",
-    );
+describe("rankGoRoutes", () => {
+  it("adds reach notes and sorts by verdict then time", () => {
+    const routes = [
+      makeRoute({ id: routeId("a-clear"), name: "a clear route" }),
+      makeRoute({ id: routeId("b-blocked"), name: "b blocked route" }),
+    ];
     const hazard = decide(
       {
-        request: trainRequest,
+        request: goRequest,
         routes,
-        observations: [],
+        observations: [
+          makeObservation({ severity: "severe", id: evidenceId("obs-block") }),
+        ],
         coverages: [makeCoverage("covered")],
         mapSnapshotId: "snap-1",
       },
       NOW,
     );
-    const ranked = fitTrainRanking(hazard.ranked, routes, trainRequest);
-    expect(ranked[0]?.suggestedLaps).toBeGreaterThan(0);
-    expect(ranked[0]?.reasons.some((row) => row.startsWith("fit:"))).toBe(true);
+    const ranked = rankGoRoutes(hazard.ranked, routes);
+    expect(ranked.map((row) => row.routeId)).toEqual([
+      "a-clear",
+      "b-blocked",
+    ]);
+    expect(ranked[0]?.reasons.some((row) => row.startsWith("reach:"))).toBe(
+      true,
+    );
   });
 });
 
@@ -313,7 +271,7 @@ describe("decide", () => {
   it("ranks blocked routes below allowed ones", () => {
     const output = decide(
       {
-        request: trainRequest,
+        request: goRequest,
         routes,
         observations: [
           makeObservation({ severity: "severe", id: evidenceId("obs-block") }),
@@ -331,7 +289,7 @@ describe("decide", () => {
 
   it("is deterministic", () => {
     const input = {
-      request: trainRequest,
+      request: goRequest,
       routes,
       observations: [makeObservation({})],
       coverages: [makeCoverage("covered")],
@@ -380,10 +338,8 @@ describe("materialize", () => {
 });
 
 describe("parseRequestBody", () => {
-  it("parses train and go requests and rejects malformed bodies", () => {
-    expect(parseRequestBody(JSON.stringify(trainRequest))).toEqual(
-      trainRequest,
-    );
+  it("parses go requests and rejects malformed bodies", () => {
+    expect(parseRequestBody(JSON.stringify(goRequest))).toEqual(goRequest);
     expect(
       parseRequestBody(
         JSON.stringify({
@@ -405,18 +361,13 @@ describe("parseRequestBody", () => {
     expect(parseRequestBody(JSON.stringify({ kind: "fly" }))).toBe(null);
   });
 
-  it("rejects invalid minutes and coordinates", () => {
-    for (const minutes of [0, -10, null, 2000]) {
-      expect(
-        parseRequestBody(JSON.stringify({ ...trainRequest, minutes })),
-      ).toBe(null);
-    }
+  it("rejects invalid coordinates", () => {
     for (const origin of [
       { lat: 91, lon: 106.0 },
       { lat: 0, lon: 181 },
     ]) {
       expect(
-        parseRequestBody(JSON.stringify({ ...trainRequest, origin })),
+        parseRequestBody(JSON.stringify({ ...goRequest, origin })),
       ).toBe(null);
     }
   });
@@ -432,9 +383,9 @@ describe("routeTouches", () => {
 });
 
 describe("DecisionOutput JSON", () => {
-  it("decodes HttpApi payloads that encode missing optionals as null", () => {
+  it("decodes HttpApi payloads for go decisions", () => {
     const wire = {
-      intent: "train",
+      intent: "go",
       ranked: [
         {
           routeId: "alsut-short",
@@ -460,7 +411,6 @@ describe("DecisionOutput JSON", () => {
           lighting: "unknown",
           mapSnapshotId: "snap",
           routeSource: "gpx",
-          venueId: null,
         },
       ],
       observations: [],
@@ -472,21 +422,19 @@ describe("DecisionOutput JSON", () => {
           point: { lat: -6.28, lon: 106.71 },
           source: "registry",
         },
-        venue: {
-          label: "Alsut loop",
-          point: { lat: -6.24, lon: 106.65 },
+        destination: {
+          label: "Oksigasi Space",
+          point: { lat: -6.26, lon: 106.7 },
           source: "registry",
-          venueId: "alsut-loop",
         },
-        destination: null,
       },
       routeSources: ["gpx"],
     };
     const exit = Schema.decodeUnknownExit(DecisionOutput)(wire);
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value.resolved.destination).toBeNull();
-      expect(exit.value.routes[0]?.venueId).toBeNull();
+      expect(exit.value.resolved.destination.label).toBe("Oksigasi Space");
+      expect(exit.value.intent).toBe("go");
     }
   });
 });

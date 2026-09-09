@@ -131,13 +131,13 @@ describe("live routing adapters", () => {
           label: "Home",
           point: origin,
           source: "registry",
-          venueId: "home",
+          registryId: "home",
         },
         {
           label: "Placeholder",
           point: destination,
           source: "registry",
-          venueId: "unknown-destination",
+          registryId: "unknown-destination",
         },
       ).pipe(
         Effect.provideService(GraphHopperConfig, {

@@ -8,7 +8,6 @@ import {
   DecisionOutput,
   PlaceSearchResponse,
   PlaceSuggestion,
-  TrainSession,
   type Verdict,
 } from "@arah/domain";
 import {
@@ -22,7 +21,7 @@ import {
 import { type Document, type Html, type HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
 import { evo } from "foldkit/struct";
-import { Button, Input, Select } from "@foldkit/ui";
+import { Button, Input } from "@foldkit/ui";
 import {
   registerArahMap,
   type MapObservation,
@@ -35,7 +34,7 @@ const Health = Schema.Struct({
   ok: Schema.Boolean,
   provenance: Schema.String,
   snapshot: Schema.String,
-  venues: Schema.Number,
+  places: Schema.Number,
   online: Schema.Boolean,
 });
 type Health = typeof Health.Type;
@@ -45,19 +44,14 @@ const ServerPlanError = Schema.Struct({
     "IntentionUnreadable",
     "PlaceNotFound",
     "RouterUnavailable",
-    "InvalidRideDuration",
     "InvalidDepartAt",
   ]),
   query: Schema.optional(Schema.String),
   detail: Schema.optional(Schema.String),
 });
 
-const Mode = Schema.Literals(["train", "go"]);
-type Mode = typeof Mode.Type;
-
 const SuggestionTarget = Schema.Literals([
   "none",
-  "venue",
   "origin",
   "destination",
 ]);
@@ -86,12 +80,8 @@ const ArahMap = CustomElement.define({
 // MODEL
 
 export const Model = Schema.Struct({
-  mode: Mode,
-  venueDraft: Schema.String,
   originDraft: Schema.String,
   destinationDraft: Schema.String,
-  session: TrainSession,
-  minutes: Schema.Number,
   night: Schema.Boolean,
   suggestFor: SuggestionTarget,
   suggestions: SuggestionsAsyncData.schema,
@@ -105,14 +95,8 @@ export type Model = typeof Model.Type;
 // MESSAGE
 
 const Message = defineMessageUnion({
-  SelectedMode: { mode: Mode },
-  UpdatedVenue: { value: Schema.String },
   UpdatedOrigin: { value: Schema.String },
   UpdatedDestination: { value: Schema.String },
-  UpdatedSession: { session: TrainSession },
-  UpdatedMinutes: { value: Schema.String },
-  ClickedMinutesIncrement: {},
-  ClickedMinutesDecrement: {},
   ToggledNight: {},
   SucceededSuggestions: {
     target: SuggestionTarget,
@@ -134,10 +118,6 @@ export { Message };
 export type Message = typeof Message.Type;
 
 // UPDATE
-
-const MIN_MINUTES = 15;
-const MAX_MINUTES = 1440;
-const MINUTES_STEP = 15;
 
 const requestSuggestions = (
   model: Model,
@@ -163,20 +143,6 @@ const requestSuggestions = (
 
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
-    SelectedMode: ({ mode }) => ({
-      model: evo(model, {
-        mode: () => mode,
-        suggestFor: () => "none" as const,
-        suggestions: () => SuggestionsAsyncData.Idle(),
-      }),
-    }),
-    UpdatedVenue: ({ value }) => {
-      const request = requestSuggestions(model, "venue", value);
-      return {
-        ...request,
-        model: evo(request.model, { venueDraft: () => value }),
-      };
-    },
     UpdatedOrigin: ({ value }) => {
       const request = requestSuggestions(model, "origin", value);
       return {
@@ -191,32 +157,6 @@ export const update = (model: Model, message: Message) =>
         model: evo(request.model, { destinationDraft: () => value }),
       };
     },
-    UpdatedSession: ({ session }) => ({
-      model: evo(model, { session: () => session }),
-    }),
-    UpdatedMinutes: ({ value }) => {
-      const parsed = Number(value);
-      if (
-        Number.isFinite(parsed) === false ||
-        parsed < MIN_MINUTES ||
-        parsed > MAX_MINUTES
-      ) {
-        return { model };
-      }
-      return {
-        model: evo(model, { minutes: () => Math.round(parsed) }),
-      };
-    },
-    ClickedMinutesIncrement: () => ({
-      model: evo(model, {
-        minutes: (current) => Math.min(MAX_MINUTES, current + MINUTES_STEP),
-      }),
-    }),
-    ClickedMinutesDecrement: () => ({
-      model: evo(model, {
-        minutes: (current) => Math.max(MIN_MINUTES, current - MINUTES_STEP),
-      }),
-    }),
     ToggledNight: () => ({
       model: evo(model, { night: (current) => current === false }),
     }),
@@ -237,15 +177,6 @@ export const update = (model: Model, message: Message) =>
       }),
     }),
     SelectedSuggestion: ({ label }) => {
-      if (model.suggestFor === "venue") {
-        return {
-          model: evo(model, {
-            venueDraft: () => label,
-            suggestFor: () => "none" as const,
-            suggestions: () => SuggestionsAsyncData.Idle(),
-          }),
-        };
-      }
       if (model.suggestFor === "origin") {
         return {
           model: evo(model, {
@@ -276,17 +207,7 @@ export const update = (model: Model, message: Message) =>
       if (AsyncData.isPending(model.decision)) {
         return { model };
       }
-      if (model.mode === "train" && model.venueDraft.trim().length === 0) {
-        return {
-          model: evo(model, {
-            decision: () =>
-              DecisionAsyncData.Failure({
-                error: "Enter a training venue. Try alsut, binloop, or kemang.",
-              }),
-          }),
-        };
-      }
-      if (model.mode === "go" && model.destinationDraft.trim().length === 0) {
+      if (model.destinationDraft.trim().length === 0) {
         return {
           model: evo(model, {
             decision: () =>
@@ -307,12 +228,8 @@ export const update = (model: Model, message: Message) =>
         }),
         commands: [
           FetchDecision({
-            kind: model.mode,
-            venue: model.venueDraft.trim(),
             origin: model.originDraft.trim(),
             destination: model.destinationDraft.trim(),
-            session: model.session,
-            minutes: model.minutes,
             night: model.night,
           }),
         ],
@@ -362,12 +279,8 @@ export const update = (model: Model, message: Message) =>
 
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({
   model: {
-    mode: "train",
-    venueDraft: "",
     originDraft: "home",
     destinationDraft: "",
-    session: "long",
-    minutes: 60,
     night: false,
     suggestFor: "none",
     suggestions: SuggestionsAsyncData.Idle(),
@@ -400,11 +313,6 @@ const failedPlanWithStatus = (
           error: "Parsed fine, but no ride exists for that pair yet.",
         });
       }
-      if (exit.value._tag === "InvalidRideDuration") {
-        return Message.FailedPlan({
-          error: "Training minutes must stay between 1 and 1440.",
-        });
-      }
       return Message.FailedPlan({
         error: exit.value.detail ?? "That ride does not parse yet.",
       });
@@ -419,35 +327,21 @@ const failedPlanWithStatus = (
 };
 
 const fetchDecisionEffect = (args: {
-  kind: Mode;
-  venue: string;
   origin: string;
   destination: string;
-  session: TrainSession;
-  minutes: number;
   night: boolean;
 }) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     const nowMs = yield* Clock.currentTimeMillis;
     const departAt = new Date(nowMs).toISOString();
-    const body =
-      args.kind === "train"
-        ? {
-            kind: "train" as const,
-            venue: args.venue,
-            session: args.session,
-            minutes: args.minutes,
-            departAt,
-            night: args.night,
-          }
-        : {
-            kind: "go" as const,
-            origin: args.origin.length > 0 ? args.origin : "home",
-            destination: args.destination,
-            departAt,
-            night: args.night,
-          };
+    const body = {
+      kind: "go" as const,
+      origin: args.origin.length > 0 ? args.origin : "home",
+      destination: args.destination,
+      departAt,
+      night: args.night,
+    };
     const httpRequest = HttpClientRequest.post("/api/decide").pipe(
       HttpClientRequest.acceptJson,
       HttpClientRequest.bodyJsonUnsafe(body),
@@ -478,12 +372,8 @@ const fetchDecisionEffect = (args: {
 
 export const FetchDecision = Command.define("FetchDecision", {
   args: {
-    kind: Mode,
-    venue: Schema.String,
     origin: Schema.String,
     destination: Schema.String,
-    session: TrainSession,
-    minutes: Schema.Number,
     night: Schema.Boolean,
   },
   messages: [Message.SucceededPlan, Message.FailedPlan],
@@ -753,147 +643,6 @@ const placeField = (
     ],
   );
 
-const sessionOptions: ReadonlyArray<{ value: TrainSession; label: string }> = [
-  { value: "long", label: "Long" },
-  { value: "tempo", label: "Tempo" },
-  { value: "brisk", label: "Brisk" },
-  { value: "recovery", label: "Recovery" },
-];
-
-const trainFields = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.div(
-    [h.Class("flex flex-col gap-3")],
-    [
-      placeField(
-        model,
-        "venue",
-        "venue-search",
-        "Training venue",
-        "alsut, binloop, kemang…",
-        model.venueDraft,
-        (value) => Message.UpdatedVenue({ value }),
-        h,
-      ),
-      h.div(
-        [h.Class("grid grid-cols-2 gap-3")],
-        [
-          h.div(
-            [h.Class("flex flex-col gap-1")],
-            [
-              h.label(
-                [
-                  h.Class(
-                    "text-xs font-semibold uppercase tracking-wide text-slate-500",
-                  ),
-                ],
-                ["Session"],
-              ),
-              Select.view(
-                {
-                  id: "train-session",
-                  value: model.session,
-                  isDisabled: AsyncData.isPending(model.decision),
-                  onChange: (value) =>
-                    Message.UpdatedSession({
-                      session:
-                        sessionOptions.find((option) => option.value === value)
-                          ?.value ?? "long",
-                    }),
-                  toView: (attributes) =>
-                    h.select(
-                      [
-                        ...attributes.select,
-                        h.Class(
-                          "w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:border-emerald-500 outline-none",
-                        ),
-                      ],
-                      sessionOptions.map((option) =>
-                        h.option(
-                          [
-                            h.Value(option.value),
-                            ...(option.value === model.session
-                              ? [h.Selected(true)]
-                              : []),
-                          ],
-                          [option.label],
-                        ),
-                      ),
-                    ),
-                },
-                h,
-              ),
-            ],
-          ),
-          h.div(
-            [h.Class("flex flex-col gap-1")],
-            [
-              h.label(
-                [
-                  h.Class(
-                    "text-xs font-semibold uppercase tracking-wide text-slate-500",
-                  ),
-                ],
-                ["Minutes"],
-              ),
-              h.div(
-                [h.Class("flex items-center gap-1")],
-                [
-                  h.button(
-                    [
-                      h.Class(
-                        "px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50",
-                      ),
-                      h.OnClick(Message.ClickedMinutesDecrement()),
-                      h.AriaLabel("Fewer minutes"),
-                    ],
-                    ["−"],
-                  ),
-                  Input.view(
-                    {
-                      id: "train-minutes",
-                      value: String(model.minutes),
-                      type: "number",
-                      isDisabled: AsyncData.isPending(model.decision),
-                      onInput: (value) => Message.UpdatedMinutes({ value }),
-                      toView: (attributes) =>
-                        h.input([
-                          ...attributes.input,
-                          h.Class(
-                            "w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-center focus:border-emerald-500 outline-none",
-                          ),
-                        ]),
-                    },
-                    h,
-                  ),
-                  h.button(
-                    [
-                      h.Class(
-                        "px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50",
-                      ),
-                      h.OnClick(Message.ClickedMinutesIncrement()),
-                      h.AriaLabel("More minutes"),
-                    ],
-                    ["+"],
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-      h.button(
-        [
-          h.Class(
-            `self-start px-3 py-1.5 rounded-full border text-xs font-semibold transition ${model.night ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-300"}`,
-          ),
-          h.OnClick(Message.ToggledNight()),
-          h.AriaPressed(model.night ? "true" : "false"),
-        ],
-        [model.night ? "Night ride on" : "Night ride off"],
-      ),
-    ],
-  );
-
 const goFields = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Class("flex flex-col gap-3")],
@@ -931,30 +680,13 @@ const goFields = (model: Model, h: HtmlBuilder<Message>): Html =>
     ],
   );
 
-const modeTab = (
-  model: Model,
-  mode: Mode,
-  label: string,
-  h: HtmlBuilder<Message>,
-): Html =>
-  h.button(
-    [
-      h.Class(
-        `flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition ${model.mode === mode ? "bg-emerald-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`,
-      ),
-      h.OnClick(Message.SelectedMode({ mode })),
-      h.AriaPressed(model.mode === mode ? "true" : "false"),
-    ],
-    [label],
-  );
-
 const statusLine = (model: Model): string =>
   AsyncData.matchDataSplitEmpty(model.health, {
     onIdle: () => "checking sources…",
     onLoading: () => "checking sources…",
     onFailure: () => "source status unknown",
     onData: (health) =>
-      `${health.provenance} · ${health.venues} venues · ${health.online ? "online" : "registry only"}`,
+      `${health.provenance} · ${health.places} places · ${health.online ? "online" : "registry only"}`,
   });
 
 const searchHeader = (model: Model, h: HtmlBuilder<Message>): Html =>
@@ -982,22 +714,13 @@ const searchHeader = (model: Model, h: HtmlBuilder<Message>): Html =>
               h.p([h.Class("text-xs text-slate-500")], [statusLine(model)]),
             ],
           ),
-          h.div(
-            [h.Class("flex gap-1 rounded-xl bg-slate-100 p-1")],
-            [
-              modeTab(model, "train", "Train", h),
-              modeTab(model, "go", "Go", h),
-            ],
-          ),
           h.form(
             [
               h.OnSubmit(Message.SubmittedSearch()),
               h.Class("flex flex-col gap-3"),
             ],
             [
-              model.mode === "train"
-                ? trainFields(model, h)
-                : goFields(model, h),
+              goFields(model, h),
               Button.view(
                 {
                   type: "submit",

@@ -5,18 +5,24 @@ import {
   HttpApiGroup,
 } from "effect/unstable/httpapi";
 import {
-  CandidateRoute,
   DecisionOutput,
   FeedbackInput,
   PlaceSearchResponse,
   RouteRequest,
 } from "../domain.js";
-import { IntentionDraft, IntentionUnreadable, InvalidRideDuration } from "../parseIntention.js";
+import {
+  IntentionDraft,
+  IntentionUnreadable,
+} from "../parseIntention.js";
 import { InvalidDepartAt } from "../planRide.js";
 import { PlaceNotFound } from "../placeResolve.js";
 import { RouterUnavailable } from "../routeCatalog.js";
 
-const DecideError = Schema.Union([PlaceNotFound, RouterUnavailable, InvalidDepartAt]).annotate({
+const DecideError = Schema.Union([
+  PlaceNotFound,
+  RouterUnavailable,
+  InvalidDepartAt,
+]).annotate({
   httpApiStatus: 422,
 });
 export type DecideError = Schema.Schema.Type<typeof DecideError>;
@@ -24,7 +30,6 @@ export type DecideError = Schema.Schema.Type<typeof DecideError>;
 const PlanError = Schema.Union([
   PlaceNotFound,
   IntentionUnreadable,
-  InvalidRideDuration,
   RouterUnavailable,
   InvalidDepartAt,
 ]).annotate({
@@ -51,7 +56,7 @@ export const Health = Schema.Struct({
   ok: Schema.Boolean,
   provenance: Schema.String,
   snapshot: Schema.String,
-  venues: Schema.Number,
+  places: Schema.Number,
   online: Schema.Boolean,
 });
 export type Health = Schema.Schema.Type<typeof Health>;
@@ -61,13 +66,6 @@ export const Received = Schema.Struct({
   received: Schema.Literal(true),
 });
 export type Received = Schema.Schema.Type<typeof Received>;
-
-/** Curated route geometries for the map. */
-export const RoutesResponse = Schema.Struct({
-  snapshot: Schema.String,
-  routes: Schema.Array(CandidateRoute),
-});
-export type RoutesResponse = Schema.Schema.Type<typeof RoutesResponse>;
 
 export class RidesApiGroup extends HttpApiGroup.make("rides")
   .add(
@@ -95,11 +93,6 @@ export class RidesApiGroup extends HttpApiGroup.make("rides")
         q: Schema.String,
       },
       success: PlaceSearchResponse,
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("routes", "/routes", {
-      success: RoutesResponse,
     }),
   )
   .add(

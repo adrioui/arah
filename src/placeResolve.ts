@@ -69,13 +69,13 @@ function fromCoords(point: GeoPoint, label: string): ResolvedPlace {
 function fromRegistry(
   label: string,
   point: GeoPoint,
-  venueId: string,
+  registryId: string,
 ): ResolvedPlace {
   return {
     label,
     point,
     source: "registry",
-    venueId,
+    registryId,
   };
 }
 

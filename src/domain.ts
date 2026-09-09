@@ -106,7 +106,7 @@ export const ResolvedPlace = Schema.Struct({
   label: Schema.String,
   point: GeoPoint,
   source: PlaceSource,
-  venueId: Schema.optional(Schema.String),
+  registryId: Schema.optional(Schema.String),
 });
 export type ResolvedPlace = Schema.Schema.Type<typeof ResolvedPlace>;
 
@@ -125,8 +125,13 @@ export const CandidateRoute = Schema.Struct({
   laneKind: Schema.Literals(["protected", "painted", "shared", "unknown"]),
   lighting: Schema.Literals(["lit", "unlit", "unknown"]),
   mapSnapshotId: Schema.String,
-  routeSource: Schema.Literals(["lushu", "gpx", "graphhopper", "osrm", "synthetic"]),
-  venueId: jsonOptional(Schema.String),
+  routeSource: Schema.Literals([
+    "lushu",
+    "gpx",
+    "graphhopper",
+    "osrm",
+    "synthetic",
+  ]),
 });
 export type CandidateRoute = Schema.Schema.Type<typeof CandidateRoute>;
 
@@ -158,27 +163,6 @@ export const CoverageEntry = Schema.Struct({
 });
 export type CoverageEntry = Schema.Schema.Type<typeof CoverageEntry>;
 
-/** Training session kinds shared by requests and LLM parse output. */
-export const TrainSession = Schema.Literals([
-  "long",
-  "tempo",
-  "brisk",
-  "recovery",
-]);
-export type TrainSession = Schema.Schema.Type<typeof TrainSession>;
-
-/** A training ride request. Venue resolves like Go destinations. */
-export const TrainRequest = Schema.Struct({
-  kind: Schema.Literal("train"),
-  venue: PlaceInput,
-  origin: Schema.optional(PlaceInput),
-  session: TrainSession,
-  minutes: PositiveMinutes,
-  departAt: DepartAt,
-  night: Schema.Boolean,
-});
-export type TrainRequest = Schema.Schema.Type<typeof TrainRequest>;
-
 /** A destination ride request. */
 export const GoRequest = Schema.Struct({
   kind: Schema.Literal("go"),
@@ -189,8 +173,8 @@ export const GoRequest = Schema.Struct({
 });
 export type GoRequest = Schema.Schema.Type<typeof GoRequest>;
 
-/** Either accepted intent. */
-export const RouteRequest = Schema.Union([TrainRequest, GoRequest]);
+/** The accepted intent. Only point-to-point rides remain. */
+export const RouteRequest = GoRequest;
 export type RouteRequest = Schema.Schema.Type<typeof RouteRequest>;
 
 /**
@@ -198,18 +182,15 @@ export type RouteRequest = Schema.Schema.Type<typeof RouteRequest>;
  * structured output rejects root `anyOf`, and RouteRequest is a union.
  */
 export const LlmRideParse = Schema.Struct({
-  kind: Schema.Literals(["train", "go"]),
-  venue: Schema.optional(Schema.String),
+  kind: Schema.Literal("go"),
   origin: Schema.optional(Schema.String),
   destination: Schema.optional(Schema.String),
-  session: Schema.optional(TrainSession),
-  minutes: Schema.optional(PositiveMinutes),
   night: Schema.optional(Schema.Boolean),
   departAt: jsonOptional(Schema.String),
 });
 export type LlmRideParse = Schema.Schema.Type<typeof LlmRideParse>;
 
-/** Ranked candidate with reasons and optional session fit. */
+/** Ranked candidate with reasons. */
 export const RankedRoute = Schema.Struct({
   routeId: RouteId,
   routeName: Schema.String,
@@ -218,21 +199,19 @@ export const RankedRoute = Schema.Struct({
   evidenceIds: Schema.Array(EvidenceId),
   coverage: CoverageState,
   estimatedMinutes: Schema.optional(Schema.Number),
-  suggestedLaps: Schema.optional(Schema.Number),
-  fitScore: Schema.optional(Schema.Number),
+  elevation: Schema.optional(Schema.Array(Schema.Number)),
 });
 export type RankedRoute = Schema.Schema.Type<typeof RankedRoute>;
 
 export const ResolvedContext = Schema.Struct({
   origin: ResolvedPlace,
-  venue: jsonOptional(ResolvedPlace),
-  destination: jsonOptional(ResolvedPlace),
+  destination: ResolvedPlace,
 });
 export type ResolvedContext = Schema.Schema.Type<typeof ResolvedContext>;
 
 /** Full decision output. */
 export const DecisionOutput = Schema.Struct({
-  intent: Schema.Literals(["train", "go"]),
+  intent: Schema.Literal("go"),
   ranked: Schema.Array(RankedRoute),
   routes: Schema.Array(CandidateRoute),
   observations: Schema.Array(Observation),
@@ -260,7 +239,7 @@ export const PlaceSuggestion = Schema.Struct({
   label: Schema.String,
   lat: Latitude,
   lon: Longitude,
-  kind: Schema.Literals(["home", "venue", "destination"]),
+  kind: Schema.Literals(["home", "destination"]),
 });
 export type PlaceSuggestion = Schema.Schema.Type<typeof PlaceSuggestion>;
 
@@ -268,7 +247,9 @@ export const PlaceSearchResponse = Schema.Struct({
   query: Schema.String,
   suggestions: Schema.Array(PlaceSuggestion),
 });
-export type PlaceSearchResponse = Schema.Schema.Type<typeof PlaceSearchResponse>;
+export type PlaceSearchResponse = Schema.Schema.Type<
+  typeof PlaceSearchResponse
+>;
 
 /** Parse an inbound JSON request body. Null when malformed. */
 export function parseRequestBody(body: string): RouteRequest | null {

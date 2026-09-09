@@ -11,7 +11,7 @@ import {
 } from "./main.js";
 
 const plannedDecision: DecisionOutput = {
-  intent: "train",
+  intent: "go",
   ranked: [],
   routes: [],
   observations: [],
@@ -23,14 +23,19 @@ const plannedDecision: DecisionOutput = {
       point: { lat: -6.2842, lon: 106.7125 },
       source: "registry",
     },
+    destination: {
+      label: "Oksigasi Space",
+      point: { lat: -6.26, lon: 106.7 },
+      source: "registry",
+    },
   },
-  routeSources: ["lushu"],
+  routeSources: ["osrm"],
 };
 
-test("submitting a train search enters loading", () => {
+test("submitting a go search enters loading", () => {
   const initial = {
     ...init().model,
-    venueDraft: "alsut",
+    destinationDraft: "oksigasi",
   };
   story(
     update,
@@ -49,7 +54,7 @@ test("submitting a train search enters loading", () => {
 test("resubmitting with prior results enters refreshing", () => {
   const initial = {
     ...init().model,
-    venueDraft: "alsut",
+    destinationDraft: "oksigasi",
   };
   story(
     update,
@@ -66,32 +71,12 @@ test("resubmitting with prior results enters refreshing", () => {
   );
 });
 
-test("submitting a train search without a venue shows validation failure", () => {
+test("submitting a go search without a destination shows validation failure", () => {
   story(
     update,
     given(init().model),
     message(Message.SubmittedSearch()),
     model((next) => {
-      expect(next.decision._tag).toBe("Failure");
-      if (next.decision._tag === "Failure") {
-        expect(next.decision.error).toContain("venue");
-      }
-    }),
-  );
-});
-
-test("go mode without a destination shows validation failure", () => {
-  const initial = {
-    ...init().model,
-    mode: "train" as const,
-  };
-  story(
-    update,
-    given(initial),
-    message(Message.SelectedMode({ mode: "go" })),
-    message(Message.SubmittedSearch()),
-    model((next) => {
-      expect(next.mode).toBe("go");
       expect(next.decision._tag).toBe("Failure");
       if (next.decision._tag === "Failure") {
         expect(next.decision.error).toContain("destination");
@@ -100,19 +85,19 @@ test("go mode without a destination shows validation failure", () => {
   );
 });
 
-test("selecting a venue suggestion fills the draft", () => {
+test("selecting a destination suggestion fills the draft", () => {
   const initial = {
     ...init().model,
-    suggestFor: "venue" as const,
+    suggestFor: "destination" as const,
   };
   story(
     update,
     given(initial),
     message(
-      Message.SelectedSuggestion({ id: "alsut-loop", label: "Alsut loop" }),
+      Message.SelectedSuggestion({ id: "oksigasi", label: "Oksigasi Space" }),
     ),
     model((next) => {
-      expect(next.venueDraft).toBe("Alsut loop");
+      expect(next.destinationDraft).toBe("Oksigasi Space");
       expect(next.suggestFor).toBe("none");
     }),
   );
@@ -133,18 +118,18 @@ test("toggling a layer hides and restores it", () => {
   );
 });
 
-test("typing a venue stores the draft", () => {
+test("typing a destination stores the draft", () => {
   story(
     update,
     given(init().model),
-    message(Message.UpdatedVenue({ value: "binloop" })),
+    message(Message.UpdatedDestination({ value: "kemang" })),
     model((next) => {
-      expect(next.venueDraft).toBe("binloop");
-      expect(next.suggestFor).toBe("venue");
+      expect(next.destinationDraft).toBe("kemang");
+      expect(next.suggestFor).toBe("destination");
     }),
     Command.resolve(
       FetchSuggestions,
-      Message.SucceededSuggestions({ target: "venue", suggestions: [] }),
+      Message.SucceededSuggestions({ target: "destination", suggestions: [] }),
     ),
   );
 });

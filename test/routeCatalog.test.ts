@@ -13,13 +13,13 @@ function runCatalog() {
         label: "Home, Pondok Aren",
         point: { lat: -6.2842, lon: 106.7125 },
         source: "registry",
-        venueId: "home",
+        registryId: "home",
       },
       {
         label: "Oksigasi Space",
         point: { lat: -6.2448, lon: 106.7996 },
         source: "registry",
-        venueId: "oksigasi",
+        registryId: "oksigasi",
       },
     );
   }).pipe(Effect.provide(TestLive));

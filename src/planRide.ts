@@ -9,24 +9,18 @@ import {
   type ResolvedPlace,
   type RouteRequest,
 } from "./domain.js";
-import { isGeoPoint } from "./domain.js";
 import { decide } from "./decide.js";
-import { fitTrainRanking, rankGoRoutes } from "./fit.js";
-import {
-  ObservationState,
-  fetchFlood,
-  fetchNowcast,
-} from "./observations.js";
+import { rankGoRoutes } from "./fit.js";
+import { ObservationState, fetchFlood, fetchNowcast } from "./observations.js";
 import { PlaceNotFound, PlaceResolver } from "./placeResolve.js";
 import { Places } from "./places.js";
 import {
   defaultDepartAt,
   IntentionDraft,
   IntentionUnreadable,
-  InvalidRideDuration,
   parseIntentionWithTables,
 } from "./parseIntention.js";
-import { goCandidates, GraphHopperConfig, trainCandidates } from "./router.js";
+import { goCandidates, GraphHopperConfig } from "./router.js";
 import { RouteCatalog, RouterUnavailable } from "./routeCatalog.js";
 
 function isLiveWeather(): boolean {
@@ -55,14 +49,9 @@ function departureTimestamp(departAt: string, nowMs: number): number {
 }
 
 function focusPointFor(
-  request: RouteRequest,
   origin: ResolvedPlace,
-  venue: ResolvedPlace | undefined,
-  destination: ResolvedPlace | undefined,
+  destination: ResolvedPlace,
 ): GeoPoint {
-  if (request.kind === "train") {
-    return venue?.point ?? origin.point;
-  }
   return destination?.point ?? origin.point;
 }
 
@@ -120,20 +109,24 @@ function fetchLiveWeather(
   const nowcast = fetchNowcast(focus, nowMs).pipe(
     Effect.map((observation) => ({
       observations: [observation],
-      coverages: [{
-        source: "nowcast" as const,
-        polygon: observation.polygon,
-        state: "covered" as const,
-      }],
+      coverages: [
+        {
+          source: "nowcast" as const,
+          polygon: observation.polygon,
+          state: "covered" as const,
+        },
+      ],
     })),
     Effect.catchTag("NowcastUnavailable", () =>
       Effect.succeed({
         observations: [],
-        coverages: [{
-          source: "nowcast" as const,
-          polygon: extent,
-          state: "unavailable" as const,
-        }],
+        coverages: [
+          {
+            source: "nowcast" as const,
+            polygon: extent,
+            state: "unavailable" as const,
+          },
+        ],
       }),
     ),
   );
@@ -145,17 +138,22 @@ function fetchLiveWeather(
     Effect.catchTag("FloodUnavailable", () =>
       Effect.succeed({
         observations: [],
-        coverages: [{
-          source: "flood" as const,
-          polygon: extent,
-          state: "unavailable" as const,
-        }],
+        coverages: [
+          {
+            source: "flood" as const,
+            polygon: extent,
+            state: "unavailable" as const,
+          },
+        ],
       }),
     ),
   );
   return Effect.all([nowcast, flood], { concurrency: 2 }).pipe(
     Effect.map(([nowcastResult, floodResult]) => ({
-      observations: [...nowcastResult.observations, ...floodResult.observations],
+      observations: [
+        ...nowcastResult.observations,
+        ...floodResult.observations,
+      ],
       coverages: [...nowcastResult.coverages, ...floodResult.coverages],
     })),
   );
@@ -175,7 +173,6 @@ export class PlanRide extends Context.Service<
     ) => Effect.Effect<
       DecisionOutput,
       | IntentionUnreadable
-      | InvalidRideDuration
       | PlaceNotFound
       | RouterUnavailable
       | InvalidDepartAt,
@@ -212,59 +209,26 @@ export class PlanRide extends Context.Service<
             lon: places.home.lon,
           };
 
-          let origin: ResolvedPlace;
-          let venue: ResolvedPlace | undefined;
-          let destination: ResolvedPlace | undefined;
-
-          if (request.kind === "train") {
-            const originInput = request.origin ?? places.home.label;
-            origin = isGeoPoint(originInput)
-              ? {
-                  label: "custom origin",
-                  point: originInput,
-                  source: "coords" as const,
-                }
-              : yield* resolver.resolve(originInput, homePoint);
-            venue = yield* resolver.resolve(request.venue, origin.point);
-          } else {
-            origin = yield* resolver.resolve(request.origin, homePoint);
-            destination = yield* resolver.resolve(
-              request.destination,
-              origin.point,
-            );
-          }
-
-          const candidates =
-            request.kind === "train"
-              ? trainCandidates(venue!, places.venues, places.snapshotId)
-              : yield* goCandidates(
-                  origin,
-                  destination!,
-                ).pipe(Effect.provideService(RouteCatalog, catalog));
-
-          const decision = (() => {
-            if (request.kind === "train") {
-              return {
-                origin,
-                venue: venue!,
-                destination: undefined,
-                intent: "train" as const,
-              };
-            }
-            return {
-              origin,
-              venue: undefined,
-              destination: destination!,
-              intent: "go" as const,
-            };
-          })();
-
-          const focus = focusPointFor(
-            request,
-            origin,
-            venue,
-            destination,
+          const origin: ResolvedPlace = yield* resolver.resolve(
+            request.origin,
+            homePoint,
           );
+          const destination: ResolvedPlace = yield* resolver.resolve(
+            request.destination,
+            origin.point,
+          );
+
+          const candidates = yield* goCandidates(origin, destination).pipe(
+            Effect.provideService(RouteCatalog, catalog),
+          );
+
+          const decision = {
+            origin,
+            destination,
+            intent: "go" as const,
+          };
+
+          const focus = focusPointFor(origin, destination);
           const extent = routeExtent(candidates, focus);
 
           const live = yield* fetchLiveWeather(nowMs, focus, extent);
@@ -279,10 +243,7 @@ export class PlanRide extends Context.Service<
             nowMs,
           );
 
-          const ranked =
-            request.kind === "train"
-              ? fitTrainRanking(hazard.ranked, candidates, request)
-              : rankGoRoutes(hazard.ranked, candidates);
+          const ranked = rankGoRoutes(hazard.ranked, candidates);
           const routeSources = [
             ...new Set(candidates.map((route) => route.routeSource)),
           ];
@@ -307,7 +268,6 @@ export class PlanRide extends Context.Service<
       ): Effect.Effect<
         DecisionOutput,
         | IntentionUnreadable
-        | InvalidRideDuration
         | PlaceNotFound
         | RouterUnavailable
         | InvalidDepartAt,
@@ -316,10 +276,7 @@ export class PlanRide extends Context.Service<
         Effect.gen(function* () {
           const nowMs = yield* Clock.currentTimeMillis;
           const departAt = draft.departAt ?? defaultDepartAt(nowMs);
-          const request = yield* parseIntentionWithTables(
-            draft.text,
-            departAt,
-          );
+          const request = yield* parseIntentionWithTables(draft.text, departAt);
           return yield* executePlan(request);
         });
 

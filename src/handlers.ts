@@ -6,14 +6,12 @@ import {
   FeedbackRejected,
   Health,
   Received,
-  RoutesResponse,
 } from "./api/Api.js";
 import { PlaceSearchResponse } from "./domain.js";
 import { ObservationState } from "./observations.js";
 import { PlanRide } from "./planRide.js";
 import { Places } from "./places.js";
 import { RouteCatalog } from "./routeCatalog.js";
-import { trainCandidates } from "./router.js";
 
 const FEEDBACK_PATH = "data/feedback.jsonl";
 
@@ -42,7 +40,7 @@ export const RidesHandlersNoDeps = HttpApiBuilder.group(
           ok: true,
           provenance: state.provenance,
           snapshot: places.snapshotId,
-          venues: places.venues.length,
+          places: places.destinations.length + 1,
           online: isOnline(),
         }),
       places: ({ payload }) =>
@@ -50,45 +48,9 @@ export const RidesHandlersNoDeps = HttpApiBuilder.group(
           query: payload.q,
           suggestions: [...places.search(payload.q)],
         }),
-      routes: () => {
-        const allRoutes = places.venues.flatMap((venue) =>
-          trainCandidates(
-            {
-              label: venue.label,
-              point: { lat: venue.lat, lon: venue.lon },
-              source: "registry",
-              venueId: venue.id,
-            },
-            places.venues,
-            places.snapshotId,
-          ),
-        );
-        return Effect.succeed<RoutesResponse>({
-          snapshot: places.snapshotId,
-          routes: [...allRoutes],
-        });
-      },
       feedback: ({ payload }) =>
         Effect.gen(function* () {
-          const knownRouteIds = new Set<string>(
-            places.venues
-              .flatMap((venue) =>
-                trainCandidates(
-                  {
-                    label: venue.label,
-                    point: { lat: venue.lat, lon: venue.lon },
-                    source: "registry",
-                    venueId: venue.id,
-                  },
-                  places.venues,
-                  places.snapshotId,
-                ),
-              )
-              .map((route) => route.id),
-          );
-          for (const routeId of catalog.pointToPointIds) {
-            knownRouteIds.add(routeId);
-          }
+          const knownRouteIds = new Set<string>(catalog.pointToPointIds);
           for (const routeId of liveGoRouteIds) {
             knownRouteIds.add(routeId);
           }

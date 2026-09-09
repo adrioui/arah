@@ -45,22 +45,6 @@ function provideFakeModel(model: LlmRideParse) {
 }
 
 describe("tableParseToRouteRequest", () => {
-  it("parses the golden long ride at alsut", () => {
-    const request = tableParseToRouteRequest(
-      "long ride at alsut 150 min",
-      DEPART,
-      null,
-    );
-    expect(request).toEqual({
-      kind: "train",
-      venue: "alsut",
-      minutes: 150,
-      session: "long",
-      departAt: DEPART,
-      night: false,
-    });
-  });
-
   it("parses go to oksigasi", () => {
     expect(tableParseToRouteRequest("go to oksigasi", DEPART, null)).toEqual({
       kind: "go",
@@ -83,14 +67,13 @@ describe("tableParseToRouteRequest", () => {
     });
   });
 
-  it("parses tempo 60 min binloop night", () => {
+  it("parses night go rides", () => {
     expect(
-      tableParseToRouteRequest("tempo 60 min binloop night", DEPART, null),
+      tableParseToRouteRequest("go to kemang night", DEPART, null),
     ).toEqual({
-      kind: "train",
-      venue: "binloop",
-      minutes: 60,
-      session: "tempo",
+      kind: "go",
+      origin: "home",
+      destination: "kemang",
       departAt: DEPART,
       night: true,
     });
@@ -121,26 +104,16 @@ describe("tableParseToRouteRequest", () => {
     ).toBeNull();
   });
 
-  it("parses unicode venue names", () => {
+  it("parses unicode destination names", () => {
     expect(
-      tableParseToRouteRequest("long ride at café 60 min", DEPART, null),
+      tableParseToRouteRequest("go to café", DEPART, null),
     ).toEqual({
-      kind: "train",
-      venue: "café",
-      session: "long",
-      minutes: 60,
+      kind: "go",
+      origin: "home",
+      destination: "café",
       departAt: DEPART,
       night: false,
     });
-  });
-
-  it("rejects zero and negative durations", () => {
-    expect(
-      tableParseToRouteRequest("long ride at alsut 0 min", DEPART, null),
-    ).toBe("invalid-duration");
-    expect(
-      tableParseToRouteRequest("long ride at alsut -10 min", DEPART, null),
-    ).toBe("invalid-duration");
   });
 
   it("rejects empty and unreadable text", () => {
@@ -180,22 +153,20 @@ describe("llmRideParseToRouteRequest", () => {
     ).toBeNull();
   });
 
-  it("converts train output and fills departAt from the clock value", () => {
+  it("converts go output and fills departAt from the clock value", () => {
     const request = llmRideParseToRouteRequest(
       {
-        kind: "train",
-        venue: "alsut",
-        session: "long",
-        minutes: 120,
+        kind: "go",
+        destination: "oksigasi",
+        origin: "home",
         night: false,
       },
       DEPART,
     );
     expect(request).toEqual({
-      kind: "train",
-      venue: "alsut",
-      session: "long",
-      minutes: 120,
+      kind: "go",
+      origin: "home",
+      destination: "oksigasi",
       departAt: DEPART,
       night: false,
     });
@@ -213,15 +184,14 @@ describe("parseIntention LLM path", () => {
 
   it("escapes to tables when the model output cannot become a ride", async () => {
     const program = parseIntentionWithTables(
-      "long ride at alsut 150 min",
+      "go to oksigasi",
       DEPART,
     ).pipe(provideFakeModel({ kind: "go", night: false }));
     const request = await Effect.runPromise(program);
     expect(request).toEqual({
-      kind: "train",
-      venue: "alsut",
-      minutes: 150,
-      session: "long",
+      kind: "go",
+      origin: "home",
+      destination: "oksigasi",
       departAt: DEPART,
       night: false,
     });

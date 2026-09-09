@@ -4,7 +4,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { Exit, Schema } from "effect";
-import { Health, Received, RoutesResponse } from "../src/api/Api.js";
+import { Health, Received } from "../src/api/Api.js";
 import { DecisionOutput, PlaceSearchResponse } from "../src/domain.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -52,10 +52,9 @@ function decodeOrFail<A, I>(
 }
 
 const goldenIntents = [
-  { text: "long ride at alsut 150 min", intent: "train" as const },
   { text: "go to oksigasi", intent: "go" as const },
-  { text: "tempo 60 min binloop night", intent: "train" as const },
   { text: "bike to oksigasi from home", intent: "go" as const },
+  { text: "ride to kemang", intent: "go" as const },
 ];
 
 async function verifyBase(base: string, label: string): Promise<void> {
@@ -66,7 +65,7 @@ async function verifyBase(base: string, label: string): Promise<void> {
   if (healthBody.ok !== true) {
     fail("/api/health body missing ok:true");
   }
-  pass(`/api/health provenance=${healthBody.provenance} venues=${healthBody.venues}`);
+  pass(`/api/health provenance=${healthBody.provenance} places=${healthBody.places}`);
 
   for (const golden of goldenIntents) {
     const response = await fetchOk(`${base}/api/intend`, {
@@ -122,7 +121,7 @@ async function verifyBase(base: string, label: string): Promise<void> {
   }
   pass(`malformed decide → ${malformed.status}`);
 
-  for (const query of ["alsut", "home", "oksigasi"]) {
+  for (const query of ["home", "oksigasi", "kemang"]) {
     const places = await fetchOk(`${base}/api/places?q=${query}`);
     const body = decodeOrFail(
       `GET /api/places?q=${query}`,
@@ -135,18 +134,11 @@ async function verifyBase(base: string, label: string): Promise<void> {
     pass(`/api/places?q=${query} → ${body.suggestions[0]?.label}`);
   }
 
-  const routes = await fetchOk(`${base}/api/routes`);
-  const routesBody = decodeOrFail("GET /api/routes", RoutesResponse, await routes.json());
-  if (routesBody.routes.length === 0) {
-    fail("/api/routes returned no routes");
-  }
-  pass(`/api/routes → ${routesBody.routes.length} geometries`);
-
   const feedback = await fetchOk(`${base}/api/feedback`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      routeId: "alsut-short",
+      routeId: "go-direct",
       kind: "praise",
       text: "runtime-verify",
       at: "2026-09-07T14:00:00.000Z",
@@ -169,7 +161,7 @@ async function verifyBase(base: string, label: string): Promise<void> {
   const cssPath = cssMatch[0];
   const js = await (await fetchOk(`${base}${jsPath}`)).text();
   const css = await (await fetchOk(`${base}${cssPath}`)).text();
-  if (!js.includes("Ride intention") || !js.includes("arah-map")) {
+  if (!js.includes("Find routes") || !js.includes("arah-map")) {
     fail(`${jsPath} does not look like the arah bundle`);
   }
   if (css.length === 0) {

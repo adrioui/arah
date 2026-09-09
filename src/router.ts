@@ -2,7 +2,6 @@ import { Context, Effect, Exit, Layer, Schedule, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { Agent, fetch as undiciFetch } from "undici";
 import { CandidateRoute, GeoPoint, ResolvedPlace, RouteId } from "./domain.js";
-import type { LoopTemplate, RegistryEntry } from "./places.js";
 import { RouteCatalog } from "./routeCatalog.js";
 
 const OsrmRoute = Schema.Struct({
@@ -74,58 +73,6 @@ function decodeRouteId(raw: string): RouteId {
   return Schema.decodeSync(RouteId)(raw);
 }
 
-function lushuLoop(
-  loop: LoopTemplate,
-  venue: RegistryEntry,
-  snapshotId: string,
-): CandidateRoute {
-  return {
-    id: decodeRouteId(loop.id),
-    name: loop.name,
-    kind: "loop",
-    points: loop.points,
-    distanceKm: loop.distanceKm,
-    climbM: loop.climbM,
-    laneKind: loop.laneKind,
-    lighting: loop.lighting,
-    mapSnapshotId: snapshotId,
-    routeSource: "lushu",
-    venueId: venue.id,
-  };
-}
-
-function syntheticLoop(
-  center: GeoPoint,
-  id: string,
-  name: string,
-  radiusDeg: number,
-  distanceKm: number,
-  snapshotId: string,
-  venueId: string | undefined,
-): CandidateRoute {
-  const points: Array<GeoPoint> = [];
-  for (let i = 0; i <= 6; i = i + 1) {
-    const angle = (i / 6) * Math.PI * 2;
-    points.push({
-      lat: center.lat + Math.sin(angle) * radiusDeg,
-      lon: center.lon + Math.cos(angle) * radiusDeg,
-    });
-  }
-  return {
-    id: decodeRouteId(id),
-    name,
-    kind: "loop",
-    points,
-    distanceKm,
-    climbM: 40,
-    laneKind: "unknown",
-    lighting: "unknown",
-    mapSnapshotId: snapshotId,
-    routeSource: "synthetic",
-    venueId,
-  };
-}
-
 function validPoint(point: GeoPoint): boolean {
   return (
     Number.isFinite(point.lat) &&
@@ -141,7 +88,6 @@ function graphhopperPathToRoute(
   path: (typeof GraphHopperRoute.Type)["paths"][number],
   name: string,
   snapshotId: string,
-  venueId: string | undefined,
 ): CandidateRoute | null {
   const points: Array<GeoPoint> = [];
   for (const pair of path.points.coordinates) {
@@ -178,7 +124,6 @@ function graphhopperPathToRoute(
     lighting: "unknown",
     mapSnapshotId: snapshotId,
     routeSource: "graphhopper",
-    venueId,
   };
 }
 
@@ -213,7 +158,6 @@ function osrmToRoute(
   coordsRaw: ReadonlyArray<ReadonlyArray<number>>,
   distanceM: number,
   snapshotId: string,
-  venueId: string | undefined,
 ): CandidateRoute | null {
   const points: Array<GeoPoint> = [];
   for (const pair of coordsRaw) {
@@ -248,7 +192,6 @@ function osrmToRoute(
     lighting: "unknown",
     mapSnapshotId: snapshotId,
     routeSource: "osrm",
-    venueId,
   };
 }
 
@@ -269,7 +212,6 @@ function directRoute(
     lighting: "unknown",
     mapSnapshotId: snapshotId,
     routeSource: "synthetic",
-    venueId: undefined,
   };
 }
 
@@ -319,7 +261,7 @@ export function fetchGraphHopperRoute(
     if (path === undefined) {
       return null;
     }
-    return graphhopperPathToRoute(path, name, snapshotId, undefined);
+    return graphhopperPathToRoute(path, name, snapshotId);
   });
 }
 
@@ -352,7 +294,6 @@ export function fetchOsrmRoute(
         route.geometry.coordinates,
         route.distance,
         snapshotId,
-        undefined,
       ) ?? null
     );
   });
@@ -412,81 +353,6 @@ function haversineKm(a: GeoPoint, b: GeoPoint): number {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.sqrt(h));
-}
-
-function venueLoops(
-  venue: RegistryEntry,
-  snapshotId: string,
-): ReadonlyArray<CandidateRoute> {
-  if (venue.loops !== undefined && venue.loops.length > 0) {
-    return venue.loops.map((loop) => lushuLoop(loop, venue, snapshotId));
-  }
-  const center = { lat: venue.lat, lon: venue.lon };
-  return [
-    syntheticLoop(
-      center,
-      `${venue.id}-short`,
-      `${venue.label} short (generated)`,
-      0.012,
-      10,
-      snapshotId,
-      venue.id,
-    ),
-    syntheticLoop(
-      center,
-      `${venue.id}-long`,
-      `${venue.label} long (generated)`,
-      0.02,
-      18,
-      snapshotId,
-      venue.id,
-    ),
-  ];
-}
-
-function findVenueById(
-  venues: ReadonlyArray<RegistryEntry>,
-  venueId: string,
-): RegistryEntry | null {
-  for (const venue of venues) {
-    if (venue.id === venueId) {
-      return venue;
-    }
-  }
-  return null;
-}
-
-export function trainCandidates(
-  venue: ResolvedPlace,
-  venues: ReadonlyArray<RegistryEntry>,
-  snapshotId: string,
-): ReadonlyArray<CandidateRoute> {
-  if (venue.venueId !== undefined) {
-    const registryVenue = findVenueById(venues, venue.venueId);
-    if (registryVenue !== null) {
-      return venueLoops(registryVenue, snapshotId);
-    }
-  }
-  return [
-    syntheticLoop(
-      venue.point,
-      "train-generated-short",
-      `${venue.label} short (generated)`,
-      0.012,
-      10,
-      snapshotId,
-      venue.venueId,
-    ),
-    syntheticLoop(
-      venue.point,
-      "train-generated-long",
-      `${venue.label} long (generated)`,
-      0.02,
-      18,
-      snapshotId,
-      venue.venueId,
-    ),
-  ];
 }
 
 export function estimateLoopMinutes(

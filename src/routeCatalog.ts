@@ -111,9 +111,9 @@ export class RouteCatalog extends Context.Service<
         origin: ResolvedPlace,
         destination: ResolvedPlace,
       ): CandidateRoute | null => {
-        const originKey = entryKey(origin.venueId ?? origin.label);
+        const originKey = entryKey(origin.registryId ?? origin.label);
         const destinationKey = entryKey(
-          destination.venueId ?? destination.label,
+          destination.registryId ?? destination.label,
         );
         return routesByPair.get(`${originKey}|${destinationKey}`) ?? null;
       };

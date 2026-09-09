@@ -14,45 +14,6 @@ const runPlan = (request: RouteRequest) =>
   }).pipe(Effect.provide(TestLive), Effect.provide(FetchHttpClient.layer));
 
 describe("PlanRide", () => {
-  it("plans a train ride at alsut from the registry offline", async () => {
-    process.env["ARAH_ONLINE"] = "0";
-    const decision = await Effect.runPromise(
-      runPlan({
-        kind: "train",
-        venue: "alsut loop",
-        session: "long",
-        minutes: 150,
-        departAt: new Date().toISOString(),
-        night: false,
-      }),
-    );
-    expect(decision.intent).toBe("train");
-    expect(decision.resolved.venue?.label).toContain("Alsut");
-    expect(decision.routes.length).toBeGreaterThan(0);
-    expect(decision.ranked.length).toBeGreaterThan(0);
-    expect(decision.ranked[0]?.suggestedLaps).toBeGreaterThan(0);
-  });
-
-  it("rejects a scheduled departure more than five minutes ahead", async () => {
-    process.env["ARAH_ONLINE"] = "0";
-    const result = await Effect.runPromise(
-      runPlan({
-        kind: "train",
-        venue: "alsut loop",
-        session: "long",
-        minutes: 150,
-        departAt: new Date(Date.now() + 60 * 60_000).toISOString(),
-        night: false,
-      }).pipe(
-        Effect.match({
-          onSuccess: () => "ok" as const,
-          onFailure: (error) => error,
-        }),
-      ),
-    );
-    expect(result).toMatchObject({ _tag: "InvalidDepartAt" });
-  });
-
   it("plans a go ride between registry places offline", async () => {
     process.env["ARAH_ONLINE"] = "0";
     const decision = await Effect.runPromise(
@@ -65,8 +26,42 @@ describe("PlanRide", () => {
       }),
     );
     expect(decision.intent).toBe("go");
-    expect(decision.resolved.destination?.label).toContain("Oksigasi");
+    expect(decision.resolved.destination.label).toContain("Oksigasi");
     expect(decision.routes.length).toBe(1);
     expect(decision.routes[0]?.kind).toBe("point-to-point");
+  });
+
+  it("rejects a scheduled departure more than five minutes ahead", async () => {
+    process.env["ARAH_ONLINE"] = "0";
+    const result = await Effect.runPromise(
+      runPlan({
+        kind: "go",
+        origin: "home",
+        destination: "oksigasi space",
+        departAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+        night: false,
+      }).pipe(
+        Effect.match({
+          onSuccess: () => "ok" as const,
+          onFailure: (error) => error,
+        }),
+      ),
+    );
+    expect(result).toMatchObject({ _tag: "InvalidDepartAt" });
+  });
+
+  it("plans a go ride with night lighting verdicts", async () => {
+    process.env["ARAH_ONLINE"] = "0";
+    const decision = await Effect.runPromise(
+      runPlan({
+        kind: "go",
+        origin: "home",
+        destination: "oksigasi space",
+        departAt: new Date().toISOString(),
+        night: true,
+      }),
+    );
+    expect(decision.intent).toBe("go");
+    expect(decision.ranked.length).toBeGreaterThan(0);
   });
 });

@@ -1,15 +1,5 @@
 import { Context, Effect, Exit, FileSystem, Layer, Schema } from "effect";
-import { GeoPoint, PlaceSuggestion, normalizePlaceQuery } from "./domain.js";
-
-const LoopTemplate = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  points: Schema.Array(GeoPoint),
-  distanceKm: Schema.Number,
-  climbM: Schema.Number,
-  laneKind: Schema.Literals(["protected", "painted", "shared", "unknown"]),
-  lighting: Schema.Literals(["lit", "unlit", "unknown"]),
-});
+import { PlaceSuggestion, normalizePlaceQuery } from "./domain.js";
 
 const RegistryEntry = Schema.Struct({
   id: Schema.String,
@@ -17,17 +7,14 @@ const RegistryEntry = Schema.Struct({
   lat: Schema.Number,
   lon: Schema.Number,
   aliases: Schema.Array(Schema.String),
-  loops: Schema.optional(Schema.Array(LoopTemplate)),
 });
 
 const PlacesFile = Schema.Struct({
   snapshotId: Schema.String,
   home: RegistryEntry,
-  venues: Schema.Array(RegistryEntry),
   destinations: Schema.Array(RegistryEntry),
 });
 
-export type LoopTemplate = Schema.Schema.Type<typeof LoopTemplate>;
 export type RegistryEntry = Schema.Schema.Type<typeof RegistryEntry>;
 
 export class PlacesReadError extends Schema.TaggedError<PlacesReadError>()(
@@ -89,7 +76,6 @@ export class Places extends Context.Service<
   {
     readonly snapshotId: string;
     readonly home: RegistryEntry;
-    readonly venues: ReadonlyArray<RegistryEntry>;
     readonly destinations: ReadonlyArray<RegistryEntry>;
     readonly findRegistry: (
       query: string,
@@ -120,7 +106,6 @@ export class Places extends Context.Service<
         kind: PlaceSuggestion["kind"];
       }> = [
         { entry: data.home, kind: "home" },
-        ...data.venues.map((entry) => ({ entry, kind: "venue" as const })),
         ...data.destinations.map((entry) => ({
           entry,
           kind: "destination" as const,
@@ -160,7 +145,6 @@ export class Places extends Context.Service<
       return Places.of({
         snapshotId: data.snapshotId,
         home: data.home,
-        venues: data.venues,
         destinations: data.destinations,
         findRegistry,
         search,
