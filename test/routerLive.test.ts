@@ -52,7 +52,9 @@ beforeAll(async () => {
     response.writeHead(200, { "content-type": "application/json" });
     const path = request.url ?? "";
     response.end(
-      JSON.stringify(path.startsWith("/route") ? graphhopperPayload : osrmPayload),
+      JSON.stringify(
+        path.startsWith("/route") ? graphhopperPayload : osrmPayload,
+      ),
     );
   });
   await new Promise<void>((resolve) => {
@@ -143,7 +145,9 @@ describe("live routing adapters", () => {
           apiKey: undefined,
         }),
         Effect.provide(FetchHttpClient.layer),
-        Effect.provide(RouteCatalog.layer.pipe(Layer.provide(NodeFileSystem.layer))),
+        Effect.provide(
+          RouteCatalog.layer.pipe(Layer.provide(NodeFileSystem.layer)),
+        ),
       ),
     );
     expect(routes).toHaveLength(1);

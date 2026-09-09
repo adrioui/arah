@@ -1,12 +1,7 @@
 import { Context, Effect, Exit, Layer, Schedule, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { Agent, fetch as undiciFetch } from "undici";
-import {
-  CandidateRoute,
-  GeoPoint,
-  ResolvedPlace,
-  RouteId,
-} from "./domain.js";
+import { CandidateRoute, GeoPoint, ResolvedPlace, RouteId } from "./domain.js";
 import type { LoopTemplate, RegistryEntry } from "./places.js";
 import { RouteCatalog } from "./routeCatalog.js";
 
@@ -53,7 +48,9 @@ export class GraphHopperConfig extends Context.Service<
 const DEFAULT_PACE_KMH = 18;
 
 function osrmBaseUrl(): string {
-  return process.env["ARAH_OSRM_URL"] ?? "https://router.project-osrm.org/route/v1";
+  return (
+    process.env["ARAH_OSRM_URL"] ?? "https://router.project-osrm.org/route/v1"
+  );
 }
 
 function isOnline(): boolean {
@@ -66,9 +63,10 @@ const ipv4Agent = new Agent({ connect: { family: 4 } });
 const fetchOsrmPayload = (url: string): Effect.Effect<unknown, never, never> =>
   Effect.tryPromise({
     try: () =>
-      undiciFetch(url, { dispatcher: ipv4Agent, signal: AbortSignal.timeout(8_000) }).then(async (response) =>
-        response.ok ? response.json() : null,
-      ),
+      undiciFetch(url, {
+        dispatcher: ipv4Agent,
+        signal: AbortSignal.timeout(8_000),
+      }).then(async (response) => (response.ok ? response.json() : null)),
     catch: () => undefined,
   }).pipe(Effect.orElseSucceed(() => null));
 
@@ -140,7 +138,7 @@ function validPoint(point: GeoPoint): boolean {
 }
 
 function graphhopperPathToRoute(
-  path: typeof GraphHopperRoute.Type["paths"][number],
+  path: (typeof GraphHopperRoute.Type)["paths"][number],
   name: string,
   snapshotId: string,
   venueId: string | undefined,
@@ -347,14 +345,16 @@ export function fetchOsrmRoute(
     if (route === undefined) {
       return null;
     }
-    return osrmToRoute(
-      id,
-      name,
-      route.geometry.coordinates,
-      route.distance,
-      snapshotId,
-      undefined,
-    ) ?? null;
+    return (
+      osrmToRoute(
+        id,
+        name,
+        route.geometry.coordinates,
+        route.distance,
+        snapshotId,
+        undefined,
+      ) ?? null
+    );
   });
 }
 
@@ -396,7 +396,9 @@ export function goCandidates(
       return [curated];
     }
 
-    return [directRoute(origin.point, destination.point, name, catalog.snapshotId)];
+    return [
+      directRoute(origin.point, destination.point, name, catalog.snapshotId),
+    ];
   });
 }
 

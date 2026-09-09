@@ -1115,24 +1115,30 @@ const ghostCard = (h: HtmlBuilder<Message>): Html =>
   );
 
 const loadingView = (h: HtmlBuilder<Message>): Html =>
-  h.div([h.Class("flex flex-col gap-3")], [
-    h.ul(
-      [h.Class("flex flex-col gap-1.5")],
-      loadingStages.map((stage) =>
-        h.li([h.Class("flex items-center gap-2 text-sm text-emerald-800")], [
-          h.span(
-            [h.Class("h-2 w-2 rounded-full bg-emerald-500 animate-pulse")],
-            [],
+  h.div(
+    [h.Class("flex flex-col gap-3")],
+    [
+      h.ul(
+        [h.Class("flex flex-col gap-1.5")],
+        loadingStages.map((stage) =>
+          h.li(
+            [h.Class("flex items-center gap-2 text-sm text-emerald-800")],
+            [
+              h.span(
+                [h.Class("h-2 w-2 rounded-full bg-emerald-500 animate-pulse")],
+                [],
+              ),
+              stage,
+            ],
           ),
-          stage,
-        ]),
+        ),
       ),
-    ),
-    h.div([h.Class("flex gap-3 overflow-x-auto pb-1")], [
-      ghostCard(h),
-      ghostCard(h),
-    ]),
-  ]);
+      h.div(
+        [h.Class("flex gap-3 overflow-x-auto pb-1")],
+        [ghostCard(h), ghostCard(h)],
+      ),
+    ],
+  );
 
 const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.section(

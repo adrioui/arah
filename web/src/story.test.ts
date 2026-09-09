@@ -54,9 +54,7 @@ test("resubmitting with prior results enters refreshing", () => {
   story(
     update,
     given(initial),
-    message(
-      Message.SucceededPlan({ decision: plannedDecision }),
-    ),
+    message(Message.SucceededPlan({ decision: plannedDecision })),
     message(Message.SubmittedSearch()),
     model((next) => {
       expect(next.decision._tag).toBe("Refreshing");
