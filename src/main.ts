@@ -15,7 +15,16 @@ function preferredPort(): number {
     return DEFAULT_PORT;
   }
   const parsed = Number(raw);
-  return Number.isNaN(parsed) ? DEFAULT_PORT : parsed;
+  if (
+    Number.isInteger(parsed) === false ||
+    parsed < 1 ||
+    parsed > 65535
+  ) {
+    throw new Error(
+      `Invalid PORT: "${raw}". Use an integer between 1 and 65535.`,
+    );
+  }
+  return parsed;
 }
 
 async function resolveListeningPort(): Promise<number> {

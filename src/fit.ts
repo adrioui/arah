@@ -27,6 +27,12 @@ export function fitTrainRanking(
   routes: ReadonlyArray<CandidateRoute>,
   request: TrainRequest,
 ): ReadonlyArray<RankedRoute> {
+  if (
+    Number.isFinite(request.minutes) === false ||
+    request.minutes <= 0
+  ) {
+    return [...ranked];
+  }
   const routeById = new Map(routes.map((route) => [route.id, route]));
   const tolerance = sessionTolerance(request.session);
 

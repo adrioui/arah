@@ -208,6 +208,24 @@ describe("assessCandidate", () => {
     expect(ranked.evidenceIds).toEqual(["obs-1"]);
   });
 
+  it("blocks when a segment crosses a polygon while both endpoints are outside", () => {
+    const ranked = assessCandidate(
+      {
+        route: makeRoute({
+          points: [
+            { lat: -6.25, lon: 106.6 },
+            { lat: -6.25, lon: 106.9 },
+          ],
+        }),
+        observations: [makeObservation({ severity: "severe" })],
+        coverages: [makeCoverage("covered")],
+        night: false,
+      },
+      NOW,
+    );
+    expect(ranked.verdict).toBe("block");
+  });
+
   it("expired observations never block", () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 10_000 }), (minutesPast) => {
@@ -257,6 +275,19 @@ describe("assessCandidate", () => {
       ),
       { seed: 7 },
     );
+  });
+
+  it("withholds when no coverage entry intersects the route", () => {
+    const ranked = assessCandidate(
+      {
+        route: makeRoute({}),
+        observations: [],
+        coverages: [],
+        night: false,
+      },
+      NOW,
+    );
+    expect(ranked.verdict).toBe("withhold");
   });
 
   it("withholds night rides on unknown lighting", () => {
@@ -373,6 +404,22 @@ describe("parseRequestBody", () => {
     expect(parseRequestBody("{nope")).toBe(null);
     expect(parseRequestBody(JSON.stringify({ kind: "fly" }))).toBe(null);
   });
+
+  it("rejects invalid minutes and coordinates", () => {
+    for (const minutes of [0, -10, null, 2000]) {
+      expect(
+        parseRequestBody(JSON.stringify({ ...trainRequest, minutes })),
+      ).toBe(null);
+    }
+    for (const origin of [
+      { lat: 91, lon: 106.0 },
+      { lat: 0, lon: 181 },
+    ]) {
+      expect(
+        parseRequestBody(JSON.stringify({ ...trainRequest, origin })),
+      ).toBe(null);
+    }
+  });
 });
 
 describe("routeTouches", () => {
@@ -403,7 +450,10 @@ describe("DecisionOutput JSON", () => {
           id: "go-direct",
           name: "direct",
           kind: "point-to-point",
-          points: [{ lat: -6.28, lon: 106.71 }],
+          points: [
+            { lat: -6.28, lon: 106.71 },
+            { lat: -6.282, lon: 106.716 },
+          ],
           distanceKm: 1,
           climbM: 0,
           laneKind: "unknown",

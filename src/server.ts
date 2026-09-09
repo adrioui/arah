@@ -43,5 +43,7 @@ const AllRoutes = Layer.mergeAll(ApiRoutes, DocsRoute, StaticRoutes);
 
 export const serverLayer = (port: number) =>
   HttpRouter.serve(AllRoutes).pipe(
-    Layer.provide(NodeHttpServer.layer(createServer, { port })),
+    Layer.provide(
+      NodeHttpServer.layer(createServer, { port, host: "127.0.0.1" }),
+    ),
   );

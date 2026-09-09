@@ -1,3 +1,5 @@
+import { Exit, Schema } from "effect";
+import { GeoPoint } from "@arah/domain";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
@@ -112,17 +114,31 @@ function observationsFeatureCollection(
   };
 }
 
+const MapRouteSchema = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  kind: Schema.Literals(["loop", "point-to-point"]),
+  points: Schema.Array(GeoPoint).pipe(Schema.check(Schema.isMinLength(2))),
+  routeSource: Schema.String,
+});
+
+const MapObservationSchema = Schema.Struct({
+  id: Schema.String,
+  source: Schema.String,
+  severity: Schema.Literals(["severe", "moderate", "info"]),
+  polygon: Schema.Array(GeoPoint).pipe(Schema.check(Schema.isMinLength(3))),
+  note: Schema.String,
+});
+
 function parseRoutes(value: string): ReadonlyArray<MapRoute> {
   if (value.length === 0) {
     return [];
   }
   try {
-    const parsed = JSON.parse(value);
-    if (Array.isArray(parsed) === false) {
-      return [];
-    }
-    // SAFETY: JSON.parse returns unknown; the array check is the boundary contract.
-    return parsed as ReadonlyArray<MapRoute>;
+    const exit = Schema.decodeUnknownExit(Schema.Array(MapRouteSchema))(
+      JSON.parse(value),
+    );
+    return Exit.isSuccess(exit) ? exit.value : [];
   } catch {
     return [];
   }
@@ -133,12 +149,10 @@ function parseObservations(value: string): ReadonlyArray<MapObservation> {
     return [];
   }
   try {
-    const parsed = JSON.parse(value);
-    if (Array.isArray(parsed) === false) {
-      return [];
-    }
-    // SAFETY: JSON.parse returns unknown; the array check is the boundary contract.
-    return parsed as ReadonlyArray<MapObservation>;
+    const exit = Schema.decodeUnknownExit(Schema.Array(MapObservationSchema))(
+      JSON.parse(value),
+    );
+    return Exit.isSuccess(exit) ? exit.value : [];
   } catch {
     return [];
   }

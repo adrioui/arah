@@ -20,15 +20,20 @@ export class AiUnavailable extends Schema.TaggedError<AiUnavailable>()(
   { reason: Schema.String },
 ) {}
 
+/** The rider gave a duration that cannot become a finite positive ride length. */
+export class InvalidRideDuration extends Schema.TaggedError<
+  InvalidRideDuration
+>()("InvalidRideDuration", { text: Schema.String }, { httpApiStatus: 422 }) {}
+
 /** What the browser posts. departAt is optional and filled by the server clock. */
 export const IntentionDraft = Schema.Struct({
-  text: Schema.String,
+  text: Schema.String.pipe(Schema.check(Schema.isMaxLength(500))),
   departAt: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type IntentionDraft = typeof IntentionDraft.Type;
 
 export function defaultDepartAt(nowMs: number): string {
-  return new Date(nowMs + 60 * 60 * 1000).toISOString();
+  return new Date(nowMs).toISOString();
 }
 
 /**
@@ -93,6 +98,7 @@ const SESSION_WORDS: ReadonlyArray<TrainSession> = [
 interface MinutesRead {
   readonly minutes: number | null;
   readonly rest: string;
+  readonly invalid: boolean;
 }
 
 interface SessionRead {
@@ -101,15 +107,15 @@ interface SessionRead {
 }
 
 function minutesFromText(text: string): MinutesRead {
-  const match = text.match(/\b(\d+(?:\.\d+)?)\s*(?:min|mins|minute|minutes|menit)\b/);
+  const match = text.match(/(-?\d+(?:\.\d+)?)\s*(?:min|mins|minute|minutes|menit)\b/);
   if (match === null || match[1] === undefined) {
-    return { minutes: null, rest: text };
+    return { minutes: null, rest: text, invalid: false };
   }
   const minutes = Number(match[1]);
   if (Number.isFinite(minutes) === false || minutes <= 0) {
-    return { minutes: null, rest: text };
+    return { minutes: null, rest: text, invalid: true };
   }
-  return { minutes, rest: text.replace(match[0], " ") };
+  return { minutes, rest: text.replace(match[0], " "), invalid: false };
 }
 
 function sessionFromText(text: string): SessionRead {
@@ -142,7 +148,9 @@ function trainVenue(rest: string): string | null {
   let work = clean(rest);
   work = work.replace(/\b(?:ride|train|loop|laps?)\b/g, " ");
   work = clean(work);
-  const atMatch = work.match(/\b(?:at|around|in|on)\s+([a-z0-9\- ]+)$/);
+  const atMatch = work.match(
+    /\b(?:at|around|in|on)\s+([\p{L}\p{N}\p{M}\- ']+)$/u,
+  );
   if (atMatch !== null && atMatch[1] !== undefined) {
     const venue = clean(atMatch[1]);
     if (venue.length > 0) {
@@ -165,12 +173,17 @@ function stripLeadingFillers(raw: string): string {
   );
 }
 
+export type TableParseResult =
+  | RouteRequest
+  | null
+  | "invalid-duration";
+
 /** Deterministic parser. Pure and service-free. Null means unreadable. */
 export function tableParseToRouteRequest(
   rawText: string,
   departAt: string,
   nightOverride: boolean | null,
-): RouteRequest | null {
+): TableParseResult {
   const text = rawText.trim();
   if (text.length === 0) {
     return null;
@@ -202,7 +215,10 @@ export function tableParseToRouteRequest(
     return { kind: "go", origin: "home", destination: target, departAt, night };
   }
 
-  const { minutes, rest: afterMinutes } = minutesFromText(work);
+  const { minutes, rest: afterMinutes, invalid } = minutesFromText(work);
+  if (invalid) {
+    return "invalid-duration";
+  }
   const { session, rest: afterSession } = sessionFromText(afterMinutes);
   if (hasTrainCue(work, minutes) === false) {
     return null;
@@ -225,9 +241,18 @@ export function tableParseToRouteRequest(
 export function parseRideIntentionTables(
   text: string,
   departAt: string,
-): Effect.Effect<RouteRequest, IntentionUnreadable> {
-  return Effect.suspend(() => {
+): Effect.Effect<
+  RouteRequest,
+  IntentionUnreadable | InvalidRideDuration
+> {
+  return Effect.suspend((): Effect.Effect<
+    RouteRequest,
+    IntentionUnreadable | InvalidRideDuration
+  > => {
     const request = tableParseToRouteRequest(text, departAt, null);
+    if (request === "invalid-duration") {
+      return Effect.fail(new InvalidRideDuration({ text }));
+    }
     return request === null
       ? Effect.fail(new IntentionUnreadable({ text }))
       : Effect.succeed(request);
@@ -259,12 +284,12 @@ export function parseIntention(
   departAt: string,
 ): Effect.Effect<
   RouteRequest,
-  IntentionUnreadable | AiUnavailable,
+  IntentionUnreadable | AiUnavailable | InvalidRideDuration,
   LanguageModel.LanguageModel
 > {
   return Effect.gen(function* () {
     const trimmed = text.trim();
-    if (trimmed.length === 0) {
+    if (trimmed.length === 0 || trimmed.length > 500) {
       return yield* new IntentionUnreadable({ text });
     }
     const hasApiKey = (process.env["ARAH_AI_API_KEY"] ?? "").length > 0;
@@ -302,7 +327,7 @@ export function parseIntentionWithTables(
   departAt: string,
 ): Effect.Effect<
   RouteRequest,
-  IntentionUnreadable,
+  IntentionUnreadable | InvalidRideDuration,
   LanguageModel.LanguageModel
 > {
   return parseIntention(text, departAt).pipe(

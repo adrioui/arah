@@ -37,11 +37,15 @@ function worstCoverage(
   return order.indexOf(first) <= order.indexOf(second) ? first : second;
 }
 
+function finitePoint(point: GeoPoint): boolean {
+  return Number.isFinite(point.lat) && Number.isFinite(point.lon);
+}
+
 export function pointInPolygon(
   point: GeoPoint,
   polygon: ReadonlyArray<GeoPoint>,
 ): boolean {
-  if (polygon.length < 3) {
+  if (polygon.length < 3 || finitePoint(point) === false) {
     return false;
   }
   let inside = false;
@@ -49,8 +53,13 @@ export function pointInPolygon(
   for (let i = 0; i < polygon.length; i = i + 1) {
     const pi = polygon[i];
     const pj = polygon[j];
-    if (pi === undefined || pj === undefined) {
-      continue;
+    if (
+      pi === undefined ||
+      pj === undefined ||
+      finitePoint(pi) === false ||
+      finitePoint(pj) === false
+    ) {
+      return false;
     }
     const crosses =
       pi.lat > point.lat !== pj.lat > point.lat &&
@@ -64,11 +73,95 @@ export function pointInPolygon(
   return inside;
 }
 
+function cross(
+  a: GeoPoint,
+  b: GeoPoint,
+  c: GeoPoint,
+): number {
+  return (b.lon - a.lon) * (c.lat - a.lat) -
+    (b.lat - a.lat) * (c.lon - a.lon);
+}
+
+function onSegment(
+  a: GeoPoint,
+  b: GeoPoint,
+  point: GeoPoint,
+): boolean {
+  const epsilon = 1e-12;
+  const collinear = Math.abs(cross(a, b, point)) <= epsilon;
+  const withinLon =
+    point.lon >= Math.min(a.lon, b.lon) - epsilon &&
+    point.lon <= Math.max(a.lon, b.lon) + epsilon;
+  const withinLat =
+    point.lat >= Math.min(a.lat, b.lat) - epsilon &&
+    point.lat <= Math.max(a.lat, b.lat) + epsilon;
+  return collinear && withinLon && withinLat;
+}
+
+function segmentsIntersect(
+  a: GeoPoint,
+  b: GeoPoint,
+  c: GeoPoint,
+  d: GeoPoint,
+): boolean {
+  if (
+    finitePoint(a) === false ||
+    finitePoint(b) === false ||
+    finitePoint(c) === false ||
+    finitePoint(d) === false
+  ) {
+    return false;
+  }
+  const d1 = cross(c, d, a);
+  const d2 = cross(c, d, b);
+  const d3 = cross(a, b, c);
+  const d4 = cross(a, b, d);
+  if (
+    ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
+  ) {
+    return true;
+  }
+  if (d1 === 0 && onSegment(c, d, a)) {
+    return true;
+  }
+  if (d2 === 0 && onSegment(c, d, b)) {
+    return true;
+  }
+  if (d3 === 0 && onSegment(a, b, c)) {
+    return true;
+  }
+  if (d4 === 0 && onSegment(a, b, d)) {
+    return true;
+  }
+  return false;
+}
+
 export function routeTouches(
   route: CandidateRoute,
   polygon: ReadonlyArray<GeoPoint>,
 ): boolean {
-  return route.points.some((point) => pointInPolygon(point, polygon));
+  if (polygon.length < 3) {
+    return false;
+  }
+  if (route.points.some((point) => pointInPolygon(point, polygon))) {
+    return true;
+  }
+  for (let i = 0; i + 1 < route.points.length; i = i + 1) {
+    const a = route.points[i];
+    const b = route.points[i + 1];
+    if (a === undefined || b === undefined) {
+      continue;
+    }
+    for (let j = 0; j < polygon.length; j = j + 1) {
+      const c = polygon[j];
+      const d = polygon[(j + 1) % polygon.length];
+      if (c !== undefined && d !== undefined && segmentsIntersect(a, b, c, d)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 export function isActive(observation: Observation, nowMs: number): boolean {
@@ -146,15 +239,19 @@ export function assessCandidate(
     reasons.push("lane protection unknown, cannot claim the route is safe");
   }
 
-  let coverage: CoverageEntry["state"] = "covered";
+  let coverage: CoverageEntry["state"] | undefined;
   for (const entry of input.coverages) {
     if (routeTouches(input.route, entry.polygon)) {
-      coverage = worstCoverage(coverage, entry.state);
+      coverage =
+        coverage === undefined
+          ? entry.state
+          : worstCoverage(coverage, entry.state);
     }
   }
-  verdict = capVerdict(verdict, coverageCap(coverage));
-  if (coverage !== "covered") {
-    reasons.push(`live coverage is ${coverage}, worst claim withheld`);
+  const effectiveCoverage = coverage ?? "unavailable";
+  verdict = capVerdict(verdict, coverageCap(effectiveCoverage));
+  if (effectiveCoverage !== "covered") {
+    reasons.push(`live coverage is ${effectiveCoverage}, worst claim withheld`);
   }
   if (reasons.length === 0) {
     reasons.push("no active hazards, facts known, coverage fresh");
@@ -166,7 +263,7 @@ export function assessCandidate(
     verdict,
     reasons,
     evidenceIds: evidence,
-    coverage,
+    coverage: effectiveCoverage,
   };
 }
 

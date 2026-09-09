@@ -17,8 +17,12 @@ const FixtureObservation = Schema.Struct({
   source: Schema.Literals(["bmkg", "flood", "air", "closure", "rider"]),
   severity: Schema.Literals(["severe", "moderate", "info"]),
   polygon: Schema.Array(GeoPoint),
-  minutesAgo: Schema.Number,
-  validForMinutes: Schema.Number,
+  minutesAgo: Schema.Number.pipe(
+    Schema.check(Schema.isGreaterThanOrEqualTo(0)),
+  ),
+  validForMinutes: Schema.Number.pipe(
+    Schema.check(Schema.isGreaterThan(0)),
+  ),
   coverage: Schema.Literals(["covered", "not-covered", "stale", "unavailable"]),
   note: Schema.String,
 });
@@ -137,7 +141,12 @@ function floodFeatureToObservation(
   for (const pair of ring) {
     const lon = pair[0];
     const lat = pair[1];
-    if (lon !== undefined && lat !== undefined) {
+    if (
+      lon !== undefined &&
+      lat !== undefined &&
+      Number.isFinite(lon) &&
+      Number.isFinite(lat)
+    ) {
       polygon.push({ lat, lon });
     }
   }
@@ -223,17 +232,36 @@ export function nowcastObservation(
 ): Observation | null {
   const hourly = payload.hourly;
   const endIndex = Math.min(hourly.time.length, 6) - 1;
-  if (endIndex < 0) {
+  if (endIndex < 0 || hourly.time.length > 6) {
     return null;
+  }
+  const precipitation = hourly.precipitation_probability;
+  const weathercodes = hourly.weathercode;
+  const winds = hourly.windspeed_10m;
+  if (
+    precipitation === undefined ||
+    weathercodes === undefined ||
+    winds === undefined ||
+    precipitation.length !== hourly.time.length ||
+    weathercodes.length !== hourly.time.length ||
+    winds.length !== hourly.time.length
+  ) {
+    return null;
+  }
+  const arrays = [precipitation, weathercodes, winds];
+  for (const values of arrays) {
+    if (values.some((value) => Number.isFinite(value) === false)) {
+      return null;
+    }
   }
   let worstSeverity: Observation["severity"] = "info";
   let worstNote = "next hours look rideable";
   let worstAt = hourly.time[0] ?? new Date(nowMs).toISOString();
   for (let i = 0; i <= endIndex; i = i + 1) {
-    const precipitation = hourly.precipitation_probability?.[i] ?? 0;
-    const weathercode = hourly.weathercode?.[i] ?? 0;
-    const wind = hourly.windspeed_10m?.[i] ?? 0;
-    const severity = nowcastSeverity(precipitation, weathercode, wind);
+    const precipitationValue = precipitation[i] ?? 0;
+    const weathercode = weathercodes[i] ?? 0;
+    const wind = winds[i] ?? 0;
+    const severity = nowcastSeverity(precipitationValue, weathercode, wind);
     const order: ReadonlyArray<Observation["severity"]> = [
       "info",
       "moderate",

@@ -22,7 +22,7 @@ describe("PlanRide", () => {
         venue: "alsut loop",
         session: "long",
         minutes: 150,
-        departAt: "2026-09-12T05:30:00+07:00",
+        departAt: new Date().toISOString(),
         night: false,
       }),
     );
@@ -33,6 +33,26 @@ describe("PlanRide", () => {
     expect(decision.ranked[0]?.suggestedLaps).toBeGreaterThan(0);
   });
 
+  it("rejects a scheduled departure more than five minutes ahead", async () => {
+    process.env["ARAH_ONLINE"] = "0";
+    const result = await Effect.runPromise(
+      runPlan({
+        kind: "train",
+        venue: "alsut loop",
+        session: "long",
+        minutes: 150,
+        departAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+        night: false,
+      }).pipe(
+        Effect.match({
+          onSuccess: () => "ok" as const,
+          onFailure: (error) => error,
+        }),
+      ),
+    );
+    expect(result).toMatchObject({ _tag: "InvalidDepartAt" });
+  });
+
   it("plans a go ride between registry places offline", async () => {
     process.env["ARAH_ONLINE"] = "0";
     const decision = await Effect.runPromise(
@@ -40,7 +60,7 @@ describe("PlanRide", () => {
         kind: "go",
         origin: "home",
         destination: "oksigasi space",
-        departAt: "2026-09-12T07:00:00+07:00",
+        departAt: new Date().toISOString(),
         night: false,
       }),
     );

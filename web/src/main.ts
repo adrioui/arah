@@ -450,6 +450,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
                       id: "ride-intention",
                       value: model.intention,
                       placeholder: "long ride at alsut 150 min",
+                      isDisabled: AsyncData.isPending(model.decision),
                       onInput: (value) => Message.UpdatedIntention({ value }),
                       toView: (attributes) =>
                         h.input([

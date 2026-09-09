@@ -32,12 +32,58 @@ export type CoverageState = Schema.Schema.Type<typeof CoverageState>;
 export const Verdict = Schema.Literals(["allow", "warn", "withhold", "block"]);
 export type Verdict = Schema.Schema.Type<typeof Verdict>;
 
-/** A geographic point. */
+/** A latitude in decimal degrees. */
+export const Latitude = Schema.Number.pipe(
+  Schema.check(
+    Schema.isGreaterThanOrEqualTo(-90),
+    Schema.isLessThanOrEqualTo(90),
+  ),
+);
+export type Latitude = Schema.Schema.Type<typeof Latitude>;
+
+/** A longitude in decimal degrees. */
+export const Longitude = Schema.Number.pipe(
+  Schema.check(
+    Schema.isGreaterThanOrEqualTo(-180),
+    Schema.isLessThanOrEqualTo(180),
+  ),
+);
+export type Longitude = Schema.Schema.Type<typeof Longitude>;
+
+/** A geographic point within valid lat/lon bounds. */
 export const GeoPoint = Schema.Struct({
-  lat: Schema.Number,
-  lon: Schema.Number,
+  lat: Latitude,
+  lon: Longitude,
 });
 export type GeoPoint = Schema.Schema.Type<typeof GeoPoint>;
+
+/** A finite, non-negative distance or elevation value. */
+export const NonNegativeNumber = Schema.Number.pipe(
+  Schema.check(
+    Schema.isGreaterThanOrEqualTo(0),
+    Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER),
+  ),
+);
+
+/** A training duration in minutes. Bounded to keep routes and cost sane. */
+export const PositiveMinutes = Schema.Number.pipe(
+  Schema.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1440)),
+);
+
+/** An ISO date-time string that parses to a real timestamp in a sane range. */
+export const DepartAt = Schema.String.pipe(
+  Schema.check(
+    Schema.makeFilter((value) => {
+      const timestamp = Date.parse(value);
+      return (
+        Number.isNaN(timestamp) === false &&
+        timestamp >= 0 &&
+        timestamp <= 4102444800000
+      );
+    }),
+  ),
+);
+export type DepartAt = Schema.Schema.Type<typeof DepartAt>;
 
 /**
  * JSON optional field. HttpApi encodes missing values as `null`.
@@ -73,9 +119,9 @@ export const CandidateRoute = Schema.Struct({
   id: RouteId,
   name: Schema.String,
   kind: Schema.Literals(["loop", "point-to-point"]),
-  points: Schema.Array(GeoPoint),
-  distanceKm: Schema.Number,
-  climbM: Schema.Number,
+  points: Schema.Array(GeoPoint).pipe(Schema.check(Schema.isMinLength(2))),
+  distanceKm: NonNegativeNumber,
+  climbM: NonNegativeNumber,
   laneKind: Schema.Literals(["protected", "painted", "shared", "unknown"]),
   lighting: Schema.Literals(["lit", "unlit", "unknown"]),
   mapSnapshotId: Schema.String,
@@ -127,8 +173,8 @@ export const TrainRequest = Schema.Struct({
   venue: PlaceInput,
   origin: Schema.optional(PlaceInput),
   session: TrainSession,
-  minutes: Schema.Number,
-  departAt: Schema.String,
+  minutes: PositiveMinutes,
+  departAt: DepartAt,
   night: Schema.Boolean,
 });
 export type TrainRequest = Schema.Schema.Type<typeof TrainRequest>;
@@ -138,7 +184,7 @@ export const GoRequest = Schema.Struct({
   kind: Schema.Literal("go"),
   origin: PlaceInput,
   destination: PlaceInput,
-  departAt: Schema.String,
+  departAt: DepartAt,
   night: Schema.Boolean,
 });
 export type GoRequest = Schema.Schema.Type<typeof GoRequest>;
@@ -157,7 +203,7 @@ export const LlmRideParse = Schema.Struct({
   origin: Schema.optional(Schema.String),
   destination: Schema.optional(Schema.String),
   session: Schema.optional(TrainSession),
-  minutes: Schema.optional(Schema.Number),
+  minutes: Schema.optional(PositiveMinutes),
   night: Schema.optional(Schema.Boolean),
   departAt: jsonOptional(Schema.String),
 });
@@ -201,8 +247,10 @@ export type DecisionOutput = Schema.Schema.Type<typeof DecisionOutput>;
 export const FeedbackInput = Schema.Struct({
   routeId: RouteId,
   kind: Schema.Literals(["hazard", "closure", "praise"]),
-  text: Schema.String,
-  at: Schema.String,
+  text: Schema.String.pipe(
+    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(500)),
+  ),
+  at: DepartAt,
 });
 export type FeedbackInput = Schema.Schema.Type<typeof FeedbackInput>;
 
@@ -210,8 +258,8 @@ export type FeedbackInput = Schema.Schema.Type<typeof FeedbackInput>;
 export const PlaceSuggestion = Schema.Struct({
   id: Schema.String,
   label: Schema.String,
-  lat: Schema.Number,
-  lon: Schema.Number,
+  lat: Latitude,
+  lon: Longitude,
   kind: Schema.Literals(["home", "venue", "destination"]),
 });
 export type PlaceSuggestion = Schema.Schema.Type<typeof PlaceSuggestion>;

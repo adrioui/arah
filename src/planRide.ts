@@ -1,4 +1,4 @@
-import { Clock, Context, Effect, Layer } from "effect";
+import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import {
@@ -23,6 +23,7 @@ import {
   defaultDepartAt,
   IntentionDraft,
   IntentionUnreadable,
+  InvalidRideDuration,
   parseIntentionWithTables,
 } from "./parseIntention.js";
 import { goCandidates, GraphHopperConfig, trainCandidates } from "./router.js";
@@ -30,6 +31,27 @@ import { RouteCatalog, RouterUnavailable } from "./routeCatalog.js";
 
 function isLiveWeather(): boolean {
   return (process.env["ARAH_LIVE"] ?? "0") === "1";
+}
+
+/** Leave time far enough in the future that a real forecast would be required. */
+const SCHEDULED_DEPARTURE_TOLERANCE_MS = 5 * 60 * 1000;
+
+export class InvalidDepartAt extends Schema.TaggedError<InvalidDepartAt>()(
+  "InvalidDepartAt",
+  { detail: Schema.String },
+  { httpApiStatus: 422 },
+) {}
+
+/** Validate a departure timestamp and return its epoch milliseconds. */
+function departureTimestamp(departAt: string, nowMs: number): number {
+  const departMs = Date.parse(departAt);
+  if (
+    Number.isNaN(departMs) ||
+    departMs > nowMs + SCHEDULED_DEPARTURE_TOLERANCE_MS
+  ) {
+    return Number.NaN;
+  }
+  return departMs;
 }
 
 function focusPointFor(
@@ -52,12 +74,16 @@ function routeExtent(
   if (points.length === 0) {
     return bboxAround(fallback, 0.02);
   }
-  const lats = points.map((point) => point.lat);
-  const lons = points.map((point) => point.lon);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
+  let minLat = points[0]!.lat;
+  let maxLat = points[0]!.lat;
+  let minLon = points[0]!.lon;
+  let maxLon = points[0]!.lon;
+  for (const point of points) {
+    minLat = Math.min(minLat, point.lat);
+    maxLat = Math.max(maxLat, point.lat);
+    minLon = Math.min(minLon, point.lon);
+    maxLon = Math.max(maxLon, point.lon);
+  }
   const pad = 0.02;
   return [
     { lat: maxLat + pad, lon: minLon - pad },
@@ -140,12 +166,19 @@ export class PlanRide extends Context.Service<
   {
     readonly plan: (
       request: RouteRequest,
-    ) => Effect.Effect<DecisionOutput, PlaceNotFound | RouterUnavailable>;
+    ) => Effect.Effect<
+      DecisionOutput,
+      PlaceNotFound | RouterUnavailable | InvalidDepartAt
+    >;
     readonly planIntention: (
       draft: IntentionDraft,
     ) => Effect.Effect<
       DecisionOutput,
-      IntentionUnreadable | PlaceNotFound | RouterUnavailable,
+      | IntentionUnreadable
+      | InvalidRideDuration
+      | PlaceNotFound
+      | RouterUnavailable
+      | InvalidDepartAt,
       LanguageModel.LanguageModel
     >;
   }
@@ -162,10 +195,18 @@ export class PlanRide extends Context.Service<
         request: RouteRequest,
       ): Effect.Effect<
         DecisionOutput,
-        PlaceNotFound | RouterUnavailable
+        PlaceNotFound | RouterUnavailable | InvalidDepartAt
       > =>
         Effect.gen(function* () {
-          const nowMs = yield* Clock.currentTimeMillis;
+          const wallclockMs = yield* Clock.currentTimeMillis;
+          const departMs = departureTimestamp(request.departAt, wallclockMs);
+          if (Number.isNaN(departMs)) {
+            return yield* new InvalidDepartAt({
+              detail:
+                "Scheduled departures are not supported yet. Request a departure within five minutes or use current conditions.",
+            });
+          }
+          const nowMs = departMs;
           const homePoint: GeoPoint = {
             lat: places.home.lat,
             lon: places.home.lon,
@@ -265,7 +306,11 @@ export class PlanRide extends Context.Service<
         draft: IntentionDraft,
       ): Effect.Effect<
         DecisionOutput,
-        IntentionUnreadable | PlaceNotFound | RouterUnavailable,
+        | IntentionUnreadable
+        | InvalidRideDuration
+        | PlaceNotFound
+        | RouterUnavailable
+        | InvalidDepartAt,
         LanguageModel.LanguageModel
       > =>
         Effect.gen(function* () {

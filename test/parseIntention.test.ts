@@ -121,6 +121,28 @@ describe("tableParseToRouteRequest", () => {
     ).toBeNull();
   });
 
+  it("parses unicode venue names", () => {
+    expect(
+      tableParseToRouteRequest("long ride at café 60 min", DEPART, null),
+    ).toEqual({
+      kind: "train",
+      venue: "café",
+      session: "long",
+      minutes: 60,
+      departAt: DEPART,
+      night: false,
+    });
+  });
+
+  it("rejects zero and negative durations", () => {
+    expect(
+      tableParseToRouteRequest("long ride at alsut 0 min", DEPART, null),
+    ).toBe("invalid-duration");
+    expect(
+      tableParseToRouteRequest("long ride at alsut -10 min", DEPART, null),
+    ).toBe("invalid-duration");
+  });
+
   it("rejects empty and unreadable text", () => {
     expect(tableParseToRouteRequest("", DEPART, null)).toBeNull();
     expect(tableParseToRouteRequest("asdf", DEPART, null)).toBeNull();

@@ -11,11 +11,12 @@ import {
   PlaceSearchResponse,
   RouteRequest,
 } from "../domain.js";
-import { IntentionDraft, IntentionUnreadable } from "../parseIntention.js";
+import { IntentionDraft, IntentionUnreadable, InvalidRideDuration } from "../parseIntention.js";
+import { InvalidDepartAt } from "../planRide.js";
 import { PlaceNotFound } from "../placeResolve.js";
 import { RouterUnavailable } from "../routeCatalog.js";
 
-const DecideError = Schema.Union([PlaceNotFound, RouterUnavailable]).annotate({
+const DecideError = Schema.Union([PlaceNotFound, RouterUnavailable, InvalidDepartAt]).annotate({
   httpApiStatus: 422,
 });
 export type DecideError = Schema.Schema.Type<typeof DecideError>;
@@ -23,7 +24,9 @@ export type DecideError = Schema.Schema.Type<typeof DecideError>;
 const PlanError = Schema.Union([
   PlaceNotFound,
   IntentionUnreadable,
+  InvalidRideDuration,
   RouterUnavailable,
+  InvalidDepartAt,
 ]).annotate({
   httpApiStatus: 422,
 });
@@ -34,6 +37,13 @@ export class MalformedRequest extends Schema.TaggedError<MalformedRequest>()(
   "MalformedRequest",
   { detail: Schema.String },
   { httpApiStatus: 400 },
+) {}
+
+/** Feedback the server is not willing to accept. */
+export class FeedbackRejected extends Schema.TaggedError<FeedbackRejected>()(
+  "FeedbackRejected",
+  { detail: Schema.String },
+  { httpApiStatus: 422 },
 ) {}
 
 /** Liveness plus data provenance. */
@@ -96,6 +106,7 @@ export class RidesApiGroup extends HttpApiGroup.make("rides")
     HttpApiEndpoint.post("feedback", "/feedback", {
       payload: FeedbackInput,
       success: Received,
+      error: FeedbackRejected,
     }),
   )
   .prefix("/api") {}

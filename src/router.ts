@@ -115,22 +115,47 @@ function syntheticLoop(
   };
 }
 
+function validPoint(point: GeoPoint): boolean {
+  return (
+    Number.isFinite(point.lat) &&
+    Number.isFinite(point.lon) &&
+    point.lat >= -90 &&
+    point.lat <= 90 &&
+    point.lon >= -180 &&
+    point.lon <= 180
+  );
+}
+
 function graphhopperPathToRoute(
   path: typeof GraphHopperRoute.Type["paths"][number],
   name: string,
   snapshotId: string,
   venueId: string | undefined,
-): CandidateRoute {
-  const points: Array<GeoPoint> = path.points.coordinates
-    .map((pair) => {
-      const lon = pair[0];
-      const lat = pair[1];
-      if (lon === undefined || lat === undefined) {
-        return null;
-      }
-      return { lat, lon };
-    })
-    .filter((point): point is GeoPoint => point !== null);
+): CandidateRoute | null {
+  const points: Array<GeoPoint> = [];
+  for (const pair of path.points.coordinates) {
+    const lon = pair[0];
+    const lat = pair[1];
+    if (
+      lon === undefined ||
+      lat === undefined ||
+      Number.isFinite(lon) === false ||
+      Number.isFinite(lat) === false
+    ) {
+      continue;
+    }
+    points.push({ lat, lon });
+  }
+  if (
+    points.length < 2 ||
+    points.some((point) => validPoint(point) === false) ||
+    Number.isFinite(path.distance) === false ||
+    path.distance < 0 ||
+    (path.ascend !== undefined &&
+      (Number.isFinite(path.ascend) === false || path.ascend < 0))
+  ) {
+    return null;
+  }
   return {
     id: decodeRouteId("go-graphhopper-primary"),
     name,
@@ -178,17 +203,34 @@ function osrmToRoute(
   distanceM: number,
   snapshotId: string,
   venueId: string | undefined,
-): CandidateRoute {
-  const pairs = coordsRaw.flatMap((pair) => {
+): CandidateRoute | null {
+  const points: Array<GeoPoint> = [];
+  for (const pair of coordsRaw) {
     const lon = pair[0];
     const lat = pair[1];
-    return lon !== undefined && lat !== undefined ? [[lon, lat] as const] : [];
-  });
+    if (
+      lon === undefined ||
+      lat === undefined ||
+      Number.isFinite(lon) === false ||
+      Number.isFinite(lat) === false
+    ) {
+      continue;
+    }
+    points.push({ lat, lon });
+  }
+  if (
+    points.length < 2 ||
+    points.some((point) => validPoint(point) === false) ||
+    Number.isFinite(distanceM) === false ||
+    distanceM < 0
+  ) {
+    return null;
+  }
   return {
     id: decodeRouteId(id),
     name,
     kind: "point-to-point",
-    points: pairs.map(([lon, lat]) => ({ lat, lon })),
+    points,
     distanceKm: distanceM / 1000,
     climbM: 0,
     laneKind: "unknown",
@@ -309,7 +351,7 @@ export function fetchOsrmRoute(
       route.distance,
       snapshotId,
       undefined,
-    );
+    ) ?? null;
   });
 }
 

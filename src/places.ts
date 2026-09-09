@@ -51,6 +51,9 @@ function entryMatches(entry: RegistryEntry, normalized: string): boolean {
   }
   for (const alias of entry.aliases) {
     const aliasNorm = normalizePlaceQuery(alias);
+    if (aliasNorm.length === 0) {
+      continue;
+    }
     if (aliasNorm === normalized || normalized.includes(aliasNorm)) {
       return true;
     }
