@@ -24,6 +24,7 @@ import { evo } from "foldkit/struct";
 import { Button, Input } from "@foldkit/ui";
 import {
   registerArahMap,
+  type MapMarker,
   type MapObservation,
   type MapRoute,
 } from "./mapElement.js";
@@ -60,8 +61,28 @@ type SuggestionTarget = typeof SuggestionTarget.Type;
 const OverlayLayer = Schema.Literals(["flood", "closure", "weather"]);
 type OverlayLayer = typeof OverlayLayer.Type;
 
+const LayerFocus = Schema.Literals(["none", "flood", "closure", "weather"]);
+type LayerFocus = typeof LayerFocus.Type;
+
+const VerdictFilter = Schema.Literals([
+  "all",
+  "allow",
+  "warn",
+  "withhold",
+  "block",
+]);
+type VerdictFilter = typeof VerdictFilter.Type;
+
+const ReportKind = Schema.Literals(["hazard", "closure", "praise"]);
+type ReportKind = typeof ReportKind.Type;
+
+const ReportResponse = Schema.Struct({
+  received: Schema.Boolean,
+});
+
 const DecisionAsyncData = AsyncData.Schema(DecisionOutput, Schema.String);
 const HealthAsyncData = AsyncData.Schema(Health, Schema.String);
+const ReportAsyncData = AsyncData.Schema(ReportResponse, Schema.String);
 const SuggestionsAsyncData = AsyncData.Schema(
   Schema.Array(PlaceSuggestion),
   Schema.String,
@@ -73,6 +94,8 @@ const ArahMap = CustomElement.define({
     routes: Schema.String,
     observations: Schema.String,
     selected: Schema.String,
+    markers: Schema.String,
+    mapFocus: Schema.String,
   },
   events: {},
 });
@@ -89,6 +112,13 @@ export const Model = Schema.Struct({
   health: HealthAsyncData.schema,
   maybeSelectedRouteId: Schema.Option(Schema.String),
   hiddenLayers: Schema.Array(OverlayLayer),
+  layerFocus: LayerFocus,
+  verdictFilter: VerdictFilter,
+  mapFocus: Schema.String,
+  focusNonce: Schema.Number,
+  reportKind: ReportKind,
+  reportDraft: Schema.String,
+  report: ReportAsyncData.schema,
 });
 export type Model = typeof Model.Type;
 
@@ -112,6 +142,15 @@ const Message = defineMessageUnion({
   FailedHealth: { error: Schema.String },
   SelectedRoute: { routeId: Schema.String },
   ToggledLayer: { layer: OverlayLayer },
+  IsolatedLayer: { layer: OverlayLayer },
+  ZoomedLayer: { layer: LayerFocus },
+  Recentered: {},
+  SetVerdictFilter: { filter: VerdictFilter },
+  UpdatedReportKind: { kind: ReportKind },
+  UpdatedReportText: { value: Schema.String },
+  SubmittedReport: {},
+  SucceededReport: {},
+  FailedReport: { error: Schema.String },
 });
 
 export { Message };
@@ -273,6 +312,71 @@ export const update = (model: Model, message: Message) =>
             : [...current, layer],
       }),
     }),
+    IsolatedLayer: ({ layer }) => ({
+      model: evo(model, {
+        layerFocus: (current) => (current === layer ? "none" : layer),
+      }),
+    }),
+    ZoomedLayer: ({ layer }) => ({
+      model: evo(model, {
+        focusNonce: (current) => current + 1,
+        mapFocus: () => layer,
+      }),
+    }),
+    Recentered: () => ({
+      model: evo(model, {
+        focusNonce: (current) => current + 1,
+        mapFocus: () => "home",
+      }),
+    }),
+    SetVerdictFilter: ({ filter }) => ({
+      model: evo(model, {
+        verdictFilter: () => filter,
+      }),
+    }),
+    UpdatedReportKind: ({ kind }) => ({
+      model: evo(model, { reportKind: () => kind }),
+    }),
+    UpdatedReportText: ({ value }) => ({
+      model: evo(model, { reportDraft: () => value }),
+    }),
+    SubmittedReport: () => {
+      if (AsyncData.isPending(model.report)) {
+        return { model };
+      }
+      if (model.reportDraft.trim().length === 0) {
+        return {
+          model: evo(model, {
+            report: () =>
+              ReportAsyncData.Failure({ error: "Describe the report first." }),
+          }),
+        };
+      }
+      return {
+        model: evo(model, {
+          report: () => ReportAsyncData.Loading(),
+        }),
+        commands: [
+          FetchFeedback({
+            routeId: selectedRouteId(model),
+            kind: model.reportKind,
+            text: model.reportDraft.trim(),
+          }),
+        ],
+      };
+    },
+    SucceededReport: () => ({
+      model: evo(model, {
+        report: () =>
+          ReportAsyncData.Success({ data: { received: true } }),
+        reportDraft: () => "",
+      }),
+    }),
+    FailedReport: ({ error }) => ({
+      model: evo(model, {
+        report: () => ReportAsyncData.Failure({ error }),
+      }),
+    }),
   });
 
 // INIT
@@ -288,6 +392,13 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
     health: HealthAsyncData.Loading(),
     maybeSelectedRouteId: Option.none(),
     hiddenLayers: [],
+    layerFocus: "none",
+    verdictFilter: "all",
+    mapFocus: "home",
+    focusNonce: 0,
+    reportKind: "hazard",
+    reportDraft: "",
+    report: ReportAsyncData.Idle(),
   },
   commands: [FetchHealth()],
 });
@@ -454,6 +565,56 @@ export const FetchHealth = Command.define("FetchHealth", {
   execute: fetchHealth,
 });
 
+const fetchFeedbackEffect = (args: {
+  routeId: string;
+  kind: ReportKind;
+  text: string;
+}) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const nowMs = yield* Clock.currentTimeMillis;
+    const httpRequest = HttpClientRequest.post("/api/feedback").pipe(
+      HttpClientRequest.acceptJson,
+      HttpClientRequest.bodyJsonUnsafe({
+        routeId: args.routeId,
+        kind: args.kind,
+        text: args.text,
+        at: new Date(nowMs).toISOString(),
+      }),
+    );
+    const response = yield* client.execute(httpRequest);
+    if (response.status !== 200) {
+      const body = yield* response.text;
+      return yield* Effect.fail(
+        Message.FailedReport({
+          error:
+            body.length > 0
+              ? body.slice(0, 200)
+              : `Server returned ${response.status}`,
+        }),
+      );
+    }
+    return Message.SucceededReport();
+  }).pipe(
+    Effect.catchTag("FailedReport", (error) => Effect.succeed(error)),
+    Effect.catch(() =>
+      Effect.succeed(
+        Message.FailedReport({ error: "Could not reach the arah API." }),
+      ),
+    ),
+    Effect.provide(Http.layer),
+  );
+
+export const FetchFeedback = Command.define("FetchFeedback", {
+  args: {
+    routeId: Schema.String,
+    kind: ReportKind,
+    text: Schema.String,
+  },
+  messages: [Message.SucceededReport, Message.FailedReport],
+  execute: (args) => fetchFeedbackEffect(args),
+});
+
 // VIEW
 
 const verdictClass = (verdict: Verdict): string => {
@@ -484,11 +645,18 @@ const layerLabel: Record<OverlayLayer, string> = {
 const visibleObservations = (
   decision: DecisionOutput,
   hidden: ReadonlyArray<OverlayLayer>,
+  focus: LayerFocus,
 ): ReadonlyArray<MapObservation> => {
   const hiddenSources = hidden.flatMap((layer) => layerSources[layer]);
+  const focusSources =
+    focus === "none" ? null : layerSources[focus];
   return decision.observations
     .filter(
       (observation) => hiddenSources.includes(observation.source) === false,
+    )
+    .filter(
+      (observation) =>
+        focusSources === null || focusSources.includes(observation.source),
     )
     .map((observation) => ({
       id: observation.id,
@@ -496,23 +664,58 @@ const visibleObservations = (
       severity: observation.severity,
       polygon: observation.polygon,
       note: observation.note,
+      observedAt: observation.observedAt,
     }));
 };
 
-const mapRoutes = (decision: DecisionOutput): ReadonlyArray<MapRoute> =>
-  decision.routes.map((route) => ({
-    id: route.id,
-    name: route.name,
-    kind: route.kind,
-    points: route.points,
-    routeSource: route.routeSource,
-  }));
+const mapRoutes = (
+  decision: DecisionOutput,
+  filter: VerdictFilter,
+): ReadonlyArray<MapRoute> => {
+  const verdictById = new Map(
+    decision.ranked.map((row) => [row.routeId, row.verdict] as const),
+  );
+  return decision.routes
+    .filter((route) => {
+      if (filter === "all") {
+        return true;
+      }
+      const verdict = verdictById.get(route.id);
+      return verdict === undefined || verdict === filter;
+    })
+    .map((route) => ({
+      id: route.id,
+      name: route.name,
+      kind: route.kind,
+      points: route.points,
+      routeSource: route.routeSource,
+    }));
+};
 
 const selectedRouteId = (model: Model): string =>
   Option.match(model.maybeSelectedRouteId, {
     onNone: () => "",
     onSome: (id) => id,
   });
+
+const mapMarkers = (
+  decision: DecisionOutput,
+): ReadonlyArray<MapMarker> => [
+  {
+    id: "origin",
+    label: decision.resolved.origin.label,
+    lat: decision.resolved.origin.point.lat,
+    lon: decision.resolved.origin.point.lon,
+    kind: "origin",
+  },
+  {
+    id: "destination",
+    label: decision.resolved.destination.label,
+    lat: decision.resolved.destination.point.lat,
+    lon: decision.resolved.destination.point.lon,
+    kind: "destination",
+  },
+];
 
 const mapHost = (
   model: Model,
@@ -527,16 +730,26 @@ const mapHost = (
         [
           h.Class("block h-full w-full"),
           arahMap.Routes(
-            JSON.stringify(decision === undefined ? [] : mapRoutes(decision)),
+            JSON.stringify(
+              decision === undefined ? [] : mapRoutes(decision, model.verdictFilter),
+            ),
           ),
           arahMap.Observations(
             JSON.stringify(
               decision === undefined
                 ? []
-                : visibleObservations(decision, model.hiddenLayers),
+                : visibleObservations(
+                    decision,
+                    model.hiddenLayers,
+                    model.layerFocus,
+                  ),
             ),
           ),
           arahMap.Selected(selectedRouteId(model)),
+          arahMap.Markers(
+            JSON.stringify(decision === undefined ? [] : mapMarkers(decision)),
+          ),
+          arahMap.MapFocus(`${model.mapFocus}:${model.focusNonce}`),
         ],
         [],
       ),
@@ -799,23 +1012,188 @@ const routeCard = (
   );
 };
 
-const layerToggles = (model: Model, h: HtmlBuilder<Message>): Html =>
+const layerPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
-    [h.Class("flex gap-1.5 flex-wrap")],
-    (["flood", "closure", "weather"] as const).map((layer) => {
+    [h.Class("flex flex-col gap-1.5")],
+    (Object.keys(layerSources) as Array<OverlayLayer>).map((layer) => {
       const hidden = model.hiddenLayers.includes(layer);
-      return h.button(
+      const isolated = model.layerFocus === layer;
+      return h.div(
+        [h.Class("flex items-center gap-1.5")],
         [
-          h.Class(
-            `px-2.5 py-1 rounded-full border text-xs font-semibold transition ${hidden ? "bg-white text-slate-400 border-slate-200" : "bg-slate-900 text-white border-slate-900"}`,
+          h.button(
+            [
+              h.Class(
+                `flex-1 text-left px-2.5 py-1 rounded-full border text-xs font-semibold transition ${hidden ? "bg-white text-slate-400 border-slate-200" : "bg-slate-900 text-white border-slate-900"}`,
+              ),
+              h.OnClick(Message.ToggledLayer({ layer })),
+              h.AriaPressed(hidden === false ? "true" : "false"),
+            ],
+            [`${hidden ? "Show" : "Hide"} ${layerLabel[layer].toLowerCase()}`],
           ),
-          h.OnClick(Message.ToggledLayer({ layer })),
-          h.AriaPressed(hidden === false ? "true" : "false"),
+          h.button(
+            [
+              h.Class(
+                `px-2.5 py-1 rounded-full border text-xs font-semibold transition ${isolated ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-300"}`,
+              ),
+              h.OnClick(Message.IsolatedLayer({ layer })),
+              h.AriaPressed(isolated ? "true" : "false"),
+            ],
+            ["Solo"],
+          ),
+          h.button(
+            [
+              h.Class(
+                "px-2.5 py-1 rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600",
+              ),
+              h.OnClick(Message.ZoomedLayer({ layer })),
+              h.AriaLabel(`Zoom to ${layerLabel[layer].toLowerCase()} layer`),
+            ],
+            ["Zoom"],
+          ),
         ],
-        [`${hidden ? "Show" : "Hide"} ${layerLabel[layer].toLowerCase()}`],
       );
     }),
   );
+
+const legend = (h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class("flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-600")],
+    [
+      h.span([h.Class("inline-flex items-center gap-1")], [
+        h.span(
+          [h.Class("inline-block h-2.5 w-2.5 rounded-sm bg-[#e11d48]")],
+          [],
+        ),
+        "severe",
+      ]),
+      h.span([h.Class("inline-flex items-center gap-1")], [
+        h.span(
+          [h.Class("inline-block h-2.5 w-2.5 rounded-sm bg-[#f59e0b]")],
+          [],
+        ),
+        "moderate",
+      ]),
+      h.span([h.Class("inline-flex items-center gap-1")], [
+        h.span(
+          [h.Class("inline-block h-2.5 w-2.5 rounded-sm bg-[#0ea5e9]")],
+          [],
+        ),
+        "info",
+      ]),
+      h.span([h.Class("inline-flex items-center gap-1")], [
+        h.span(
+          [h.Class("inline-block h-2.5 w-2.5 rounded-sm bg-[#ea580c]")],
+          [],
+        ),
+        "selected route",
+      ]),
+      h.span([h.Class("inline-flex items-center gap-1")], [
+        h.span(
+          [h.Class("inline-block h-2.5 w-2.5 rounded-sm bg-[#0d9488]")],
+          [],
+        ),
+        "route",
+      ]),
+    ],
+  );
+
+const verdictChips = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class("flex gap-1.5 flex-wrap")],
+    (["all", "allow", "warn", "withhold", "block"] as const).map(
+      (filter) =>
+        h.button(
+          [
+            h.Class(
+              `px-2.5 py-1 rounded-full border text-xs font-semibold transition ${model.verdictFilter === filter ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-300"}`,
+            ),
+            h.OnClick(Message.SetVerdictFilter({ filter })),
+            h.AriaPressed(model.verdictFilter === filter ? "true" : "false"),
+          ],
+          [filter],
+        ),
+    ),
+  );
+
+const reportForm = (
+  model: Model,
+  decision: DecisionOutput,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const pending = AsyncData.isPending(model.report);
+  return h.form(
+    [
+      h.OnSubmit(Message.SubmittedReport()),
+      h.Class("flex flex-col gap-2 rounded-xl border border-slate-200 p-3"),
+    ],
+    [
+      h.p(
+        [h.Class("text-xs font-semibold text-slate-700")],
+        [`Report for ${(selectedRouteId(model) || decision.ranked[0]?.routeId) ?? "this ride"}`],
+      ),
+      h.div(
+        [h.Class("flex gap-1.5")],
+        (["hazard", "closure", "praise"] as const).map((kind) =>
+          h.button(
+            [
+              h.Class(
+                `px-2.5 py-1 rounded-full border text-xs font-semibold transition ${model.reportKind === kind ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-300"}`,
+              ),
+              h.OnClick(Message.UpdatedReportKind({ kind })),
+              h.AriaPressed(model.reportKind === kind ? "true" : "false"),
+            ],
+            [kind],
+          ),
+        ),
+      ),
+      Input.view(
+        {
+          id: "report-text",
+          value: model.reportDraft,
+          isDisabled: pending,
+          onInput: (value) => Message.UpdatedReportText({ value }),
+          toView: (attributes) =>
+            h.input([
+              ...attributes.input,
+              h.Class(
+                "w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:border-emerald-500 outline-none",
+              ),
+            ]),
+        },
+        h,
+      ),
+      Button.view(
+        {
+          type: "submit",
+          isDisabled: pending,
+          toView: (attributes) =>
+            h.button(
+              [
+                ...attributes.button,
+                h.Class(
+                  "px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded-lg hover:bg-slate-700 transition data-[disabled]:opacity-50",
+                ),
+              ],
+              [pending ? "Sending…" : "Send report"],
+            ),
+        },
+        h,
+      ),
+      AsyncData.matchDataSplitEmpty(model.report, {
+        onIdle: () => h.empty,
+        onLoading: () => h.empty,
+        onFailure: (error) =>
+          h.p([h.Class("text-xs text-rose-700")], [error]),
+        onData: () =>
+          h.p(
+            [h.Class("text-xs text-emerald-700 font-medium")],
+            ["Report received. Thank you."],
+          ),
+      }),
+    ],
+  );
+};
 
 const loadingStages: ReadonlyArray<string> = [
   "Resolving places",
@@ -882,7 +1260,7 @@ const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
             onIdle: () =>
               h.p(
                 [h.Class("text-sm text-slate-500 text-center")],
-                ["Pick a mode, enter places, and tap Find routes."],
+                ["Enter places above and tap Find routes."],
               ),
             onLoading: () => loadingView(h),
             onFailure: (error) =>
@@ -895,7 +1273,13 @@ const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
                 [error],
               ),
             onData: (decision) => {
-              const cards = decision.ranked
+              const visibleRanked =
+                model.verdictFilter === "all"
+                  ? decision.ranked
+                  : decision.ranked.filter(
+                      (row) => row.verdict === model.verdictFilter,
+                    );
+              const cards = visibleRanked
                 .map((ranked) => routeCard(model, decision, ranked.routeId, h))
                 .filter((card): card is Html => card !== undefined);
               const active = decision.ranked.find(
@@ -912,7 +1296,19 @@ const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
                         ),
                       ]
                     : []),
-                  layerToggles(model, h),
+                  layerPanel(model, h),
+                  legend(h),
+                  h.button(
+                    [
+                      h.Class(
+                        "self-start px-3 py-1.5 rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600",
+                      ),
+                      h.OnClick(Message.Recentered()),
+                      h.AriaLabel("Recenter map on home area"),
+                    ],
+                    ["Recenter"],
+                  ),
+                  verdictChips(model, h),
                   cards.length > 0
                     ? h.div(
                         [h.Class("flex gap-3 overflow-x-auto pb-1 snap-x")],
@@ -938,6 +1334,7 @@ const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
                       `Sources: ${decision.routeSources.join(", ")} · snapshot ${decision.mapSnapshotId}`,
                     ],
                   ),
+                  reportForm(model, decision, h),
                 ],
               );
             },

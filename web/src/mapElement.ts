@@ -43,6 +43,15 @@ export interface MapObservation {
     readonly lon: number;
   }>;
   readonly note: string;
+  readonly observedAt?: string | undefined;
+}
+
+export interface MapMarker {
+  readonly id: string;
+  readonly label: string;
+  readonly lat: number;
+  readonly lon: number;
+  readonly kind: "origin" | "destination";
 }
 
 const STYLE_URL =
@@ -141,6 +150,15 @@ const MapObservationSchema = Schema.Struct({
   severity: Schema.Literals(["severe", "moderate", "info"]),
   polygon: Schema.Array(GeoPoint).pipe(Schema.check(Schema.isMinLength(3))),
   note: Schema.String,
+  observedAt: Schema.optional(Schema.String),
+});
+
+const MapMarkerSchema = Schema.Struct({
+  id: Schema.String,
+  label: Schema.String,
+  lat: Schema.Number,
+  lon: Schema.Number,
+  kind: Schema.Literals(["origin", "destination"]),
 });
 
 function parseRoutes(value: string): ReadonlyArray<MapRoute> {
@@ -171,11 +189,31 @@ function parseObservations(value: string): ReadonlyArray<MapObservation> {
   }
 }
 
+function parseMarkers(value: string): ReadonlyArray<MapMarker> {
+  if (value.length === 0) {
+    return [];
+  }
+  try {
+    const exit = Schema.decodeUnknownExit(Schema.Array(MapMarkerSchema))(
+      JSON.parse(value),
+    );
+    return Exit.isSuccess(exit) ? exit.value : [];
+  } catch {
+    return [];
+  }
+}
+
+const HOME_CENTER: [number, number] = [106.79, -6.27];
+const HOME_ZOOM = 11;
+
 class ArahMapElement extends HTMLElement {
   #map: maplibregl.Map | null = null;
   #routes: ReadonlyArray<MapRoute> = [];
   #observations: ReadonlyArray<MapObservation> = [];
+  #markers: ReadonlyArray<MapMarker> = [];
   #selected: string = "";
+  #focus: string = "";
+  #popup: maplibregl.Popup | null = null;
 
   connectedCallback(): void {
     if (this.#map !== null) {
@@ -185,11 +223,14 @@ class ArahMapElement extends HTMLElement {
     this.#map = new maplibregl.Map({
       container: this,
       style: STYLE_URL,
-      center: [106.79, -6.27],
-      zoom: 11,
+      center: HOME_CENTER,
+      zoom: HOME_ZOOM,
     });
     this.#map.addControl(
       new maplibregl.NavigationControl({ visualizePitch: true }),
+    );
+    this.#map.on("click", "observation-fill", (event) =>
+      this.showObservationPopup(event),
     );
     this.#map.on("load", () => this.render());
   }
@@ -226,12 +267,34 @@ class ArahMapElement extends HTMLElement {
     return this.#selected;
   }
 
+  set markers(value: string) {
+    this.#markers = parseMarkers(value);
+    this.render();
+  }
+
+  get markers(): string {
+    return JSON.stringify(this.#markers);
+  }
+
+  set mapFocus(value: string) {
+    if (value === this.#focus) {
+      return;
+    }
+    this.#focus = value;
+    this.applyFocus();
+  }
+
+  get mapFocus(): string {
+    return this.#focus;
+  }
+
   private render(): void {
     if (this.#map === null || this.#map.loaded() === false) {
       return;
     }
     this.renderRoutes(this.#routes, this.#selected);
     this.renderObservations(this.#observations);
+    this.renderMarkers(this.#markers);
     this.fitBounds(this.#routes);
   }
 
@@ -355,6 +418,122 @@ class ArahMapElement extends HTMLElement {
         "line-width": 2,
       },
     });
+  }
+
+  private renderMarkers(markers: ReadonlyArray<MapMarker>): void {
+    const data = {
+      type: "FeatureCollection" as const,
+      features: markers.map((marker) => ({
+        type: "Feature" as const,
+        properties: {
+          id: marker.id,
+          label: marker.label,
+          kind: marker.kind,
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [marker.lon, marker.lat] as [number, number],
+        },
+      })),
+    };
+    const source =
+      this.#map!.getSource<maplibregl.GeoJSONSource>("markers");
+    if (source !== undefined) {
+      source.setData(data as never);
+      return;
+    }
+    this.#map!.addSource("markers", { type: "geojson", data });
+    this.#map!.addLayer({
+      id: "marker-circle",
+      type: "circle",
+      source: "markers",
+      paint: {
+        "circle-color": [
+          "match",
+          ["get", "kind"],
+          "origin",
+          "#059669",
+          "#2563eb",
+        ],
+        "circle-radius": 8,
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2,
+      },
+    });
+    this.#map!.addLayer({
+      id: "marker-label",
+      type: "symbol",
+      source: "markers",
+      layout: {
+        "text-field": ["get", "label"],
+        "text-size": 12,
+        "text-offset": [0, 1.4],
+      },
+      paint: {
+        "text-color": "#0f172a",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.5,
+      },
+    });
+  }
+
+  private showObservationPopup(
+    event: maplibregl.MapLayerMouseEvent & {
+      features?: Array<maplibregl.MapGeoJSONFeature>;
+    },
+  ): void {
+    const feature = event.features?.[0];
+    if (feature === undefined) {
+      return;
+    }
+    const props = feature.properties as Record<string, string>;
+    const observed = props["observedAt"];
+    this.#popup?.remove();
+    this.#popup = new maplibregl.Popup({ closeButton: true })
+      .setLngLat(event.lngLat)
+      .setHTML(
+        `<strong>${props["source"] ?? "observation"} · ${props["severity"] ?? "info"}</strong><br>${props["note"] ?? ""}${observed !== undefined ? `<br><small>${observed}</small>` : ""}`,
+      )
+      .addTo(this.#map!);
+  }
+
+  private applyFocus(): void {
+    if (this.#map === null || this.#map.loaded() === false) {
+      return;
+    }
+    const [target] = this.#focus.split(":");
+    if (target === undefined || target === "" || target === "home") {
+      this.#map.easeTo({ center: HOME_CENTER, zoom: HOME_ZOOM });
+      return;
+    }
+    if (target === "routes") {
+      this.fitBounds(this.#routes);
+      return;
+    }
+    const layerSources: Record<string, ReadonlyArray<string>> = {
+      flood: ["flood"],
+      closure: ["closure"],
+      weather: ["bmkg", "nowcast", "air"],
+    };
+    const sources = layerSources[target];
+    if (sources === undefined) {
+      return;
+    }
+    const points = this.#observations
+      .filter((observation) => sources.includes(observation.source))
+      .flatMap((observation) => [...observation.polygon]);
+    if (points.length === 0) {
+      return;
+    }
+    const lats = points.map((point) => point.lat);
+    const lons = points.map((point) => point.lon);
+    this.#map.fitBounds(
+      [
+        [Math.min(...lons), Math.min(...lats)],
+        [Math.max(...lons), Math.max(...lats)],
+      ],
+      { padding: 60, maxZoom: 14, duration: 500 },
+    );
   }
 
   private fitBounds(routes: ReadonlyArray<MapRoute>): void {

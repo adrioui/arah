@@ -4,6 +4,7 @@ import type { DecisionOutput } from "@arah/domain";
 
 import {
   FetchDecision,
+  FetchFeedback,
   FetchSuggestions,
   Message,
   init,
@@ -99,6 +100,69 @@ test("selecting a destination suggestion fills the draft", () => {
     model((next) => {
       expect(next.destinationDraft).toBe("Oksigasi Space");
       expect(next.suggestFor).toBe("none");
+    }),
+  );
+});
+
+test("isolating a layer and zooming bumps the map focus", () => {
+  story(
+    update,
+    given(init().model),
+    message(Message.IsolatedLayer({ layer: "flood" })),
+    model((next) => {
+      expect(next.layerFocus).toBe("flood");
+    }),
+    message(Message.ZoomedLayer({ layer: "flood" })),
+    model((next) => {
+      expect(next.mapFocus).toBe("flood");
+      expect(next.focusNonce).toBe(1);
+    }),
+    message(Message.Recentered()),
+    model((next) => {
+      expect(next.mapFocus).toBe("home");
+      expect(next.focusNonce).toBe(2);
+    }),
+  );
+});
+
+test("setting a verdict filter sticks", () => {
+  story(
+    update,
+    given(init().model),
+    message(Message.SetVerdictFilter({ filter: "allow" })),
+    model((next) => {
+      expect(next.verdictFilter).toBe("allow");
+    }),
+  );
+});
+
+test("submitting an empty report shows validation failure", () => {
+  story(
+    update,
+    given(init().model),
+    message(Message.SubmittedReport()),
+    model((next) => {
+      expect(next.report._tag).toBe("Failure");
+    }),
+  );
+});
+
+test("submitting a report sends feedback", () => {
+  const initial = {
+    ...init().model,
+    reportDraft: "flooded underpass",
+  };
+  story(
+    update,
+    given(initial),
+    message(Message.SubmittedReport()),
+    model((next) => {
+      expect(next.report._tag).toBe("Loading");
+    }),
+    Command.resolve(FetchFeedback, Message.SucceededReport()),
+    model((next) => {
+      expect(next.report._tag).toBe("Success");
+      expect(next.reportDraft).toBe("");
     }),
   );
 });
