@@ -10,6 +10,7 @@ import {
   type RouteRequest,
 } from "./domain.js";
 import { decide } from "./decide.js";
+import { resolveIsochrone } from "./isochrone.js";
 import { sampleRouteElevation } from "./elevation.js";
 import { rankGoRoutes, rankOptionsFrom } from "./fit.js";
 import { ObservationState, fetchFlood, fetchNowcast } from "./observations.js";
@@ -233,6 +234,7 @@ export class PlanRide extends Context.Service<
           const extent = routeExtent(candidates, focus);
 
           const live = yield* fetchLiveWeather(nowMs, focus, extent);
+          const ring = yield* resolveIsochrone(origin.point);
           const hazard = decide(
             {
               request,
@@ -282,6 +284,7 @@ export class PlanRide extends Context.Service<
             ranked,
             routes: [...candidates],
             observations: [...state.observations, ...live.observations],
+            isochrone: [...ring],
             mapSnapshotId: hazard.mapSnapshotId,
             decidedAt: hazard.decidedAt,
             resolved: decision,

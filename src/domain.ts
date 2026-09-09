@@ -226,6 +226,7 @@ export const DecisionOutput = Schema.Struct({
   ranked: Schema.Array(RankedRoute),
   routes: Schema.Array(CandidateRoute),
   observations: Schema.Array(Observation),
+  isochrone: Schema.optional(Schema.Array(GeoPoint)),
   mapSnapshotId: Schema.String,
   decidedAt: Schema.String,
   resolved: ResolvedContext,

@@ -106,6 +106,7 @@ const ArahMap = CustomElement.define({
     selected: Schema.String,
     markers: Schema.String,
     mapFocus: Schema.String,
+    isochrone: Schema.String,
   },
   events: {},
 });
@@ -792,6 +793,9 @@ const mapHost = (
             JSON.stringify(decision === undefined ? [] : mapMarkers(decision)),
           ),
           arahMap.MapFocus(`${model.mapFocus}:${model.focusNonce}`),
+          arahMap.Isochrone(
+            JSON.stringify(decision === undefined ? [] : (decision.isochrone ?? [])),
+          ),
         ],
         [],
       ),
@@ -1216,6 +1220,13 @@ const legend = (h: HtmlBuilder<Message>): Html =>
           [],
         ),
         "info",
+      ]),
+      h.span([h.Class("inline-flex items-center gap-1")], [
+        h.span(
+          [h.Class("inline-block h-2.5 w-2.5 rounded-sm bg-[#10b981]")],
+          [],
+        ),
+        "≈30 min reach",
       ]),
       h.span([h.Class("inline-flex items-center gap-1")], [
         h.span(

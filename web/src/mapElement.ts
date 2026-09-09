@@ -206,11 +206,33 @@ function parseMarkers(value: string): ReadonlyArray<MapMarker> {
 const HOME_CENTER: [number, number] = [106.79, -6.27];
 const HOME_ZOOM = 11;
 
+const MapIsochroneSchema = Schema.Array(GeoPoint).pipe(
+  Schema.check(Schema.isMinLength(3)),
+);
+
+function parseIsochrone(
+  value: string,
+): ReadonlyArray<{ readonly lat: number; readonly lon: number }> {
+  if (value.length === 0) {
+    return [];
+  }
+  try {
+    const exit = Schema.decodeUnknownExit(MapIsochroneSchema)(
+      JSON.parse(value),
+    );
+    return Exit.isSuccess(exit) ? exit.value : [];
+  } catch {
+    return [];
+  }
+}
+
 class ArahMapElement extends HTMLElement {
   #map: maplibregl.Map | null = null;
   #routes: ReadonlyArray<MapRoute> = [];
   #observations: ReadonlyArray<MapObservation> = [];
   #markers: ReadonlyArray<MapMarker> = [];
+  #isochrone: ReadonlyArray<{ readonly lat: number; readonly lon: number }> =
+    [];
   #selected: string = "";
   #focus: string = "";
   #popup: maplibregl.Popup | null = null;
@@ -276,6 +298,15 @@ class ArahMapElement extends HTMLElement {
     return JSON.stringify(this.#markers);
   }
 
+  set isochrone(value: string) {
+    this.#isochrone = parseIsochrone(value);
+    this.render();
+  }
+
+  get isochrone(): string {
+    return JSON.stringify(this.#isochrone);
+  }
+
   set mapFocus(value: string) {
     if (value === this.#focus) {
       return;
@@ -295,6 +326,7 @@ class ArahMapElement extends HTMLElement {
     this.renderRoutes(this.#routes, this.#selected);
     this.renderObservations(this.#observations);
     this.renderMarkers(this.#markers);
+    this.renderIsochrone(this.#isochrone);
     this.fitBounds(this.#routes);
   }
 
@@ -539,6 +571,53 @@ class ArahMapElement extends HTMLElement {
       ],
       { padding: 60, maxZoom: 14, duration: 500 },
     );
+  }
+
+  private renderIsochrone(
+    ring: ReadonlyArray<{ readonly lat: number; readonly lon: number }>,
+  ): void {
+    const geometry = polygonGeometry(ring);
+    const data: FeatureCollection = {
+      type: "FeatureCollection",
+      features:
+        geometry === null
+          ? []
+          : [
+              {
+                type: "Feature",
+                properties: { id: "reach", source: "reach", severity: "info", note: "reach" },
+                geometry,
+              },
+            ],
+    };
+    const source =
+      this.#map!.getSource<maplibregl.GeoJSONSource>("isochrone");
+    if (source !== undefined) {
+      source.setData(data);
+      return;
+    }
+    this.#map!.addSource("isochrone", { type: "geojson", data });
+    this.#map!.addLayer({
+      id: "isochrone-fill",
+      type: "fill",
+      source: "isochrone",
+      layout: {},
+      paint: {
+        "fill-color": "#10b981",
+        "fill-opacity": 0.12,
+      },
+    });
+    this.#map!.addLayer({
+      id: "isochrone-outline",
+      type: "line",
+      source: "isochrone",
+      layout: {},
+      paint: {
+        "line-color": "#10b981",
+        "line-width": 2,
+        "line-dasharray": [2, 2],
+      },
+    });
   }
 
   private fitBounds(routes: ReadonlyArray<MapRoute>): void {
