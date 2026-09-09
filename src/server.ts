@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
@@ -14,6 +15,7 @@ const ApiRoutes = HttpApiBuilder.layer(ArahApi, {
 const DocsRoute = HttpApiScalar.layer(ArahApi, { path: "/docs" });
 
 const WEB_DIST = "web/dist";
+const TILES_DIR = "data/tiles";
 
 const StaticRoutes = HttpRouter.use(
   Effect.fn(function* (router) {
@@ -22,6 +24,23 @@ const StaticRoutes = HttpRouter.use(
       "/",
       HttpServerResponse.file(path.join(WEB_DIST, "index.html"), {
         contentType: "text/html; charset=utf-8",
+      }),
+    );
+    yield* router.add("GET", "/tiles/*", (request) =>
+      Effect.gen(function* () {
+        const url = new URL(request.url, "http://localhost");
+        const tilePath = url.pathname.replace(/^\/tiles\//, "");
+        if (
+          tilePath.includes("..") ||
+          tilePath.length === 0 ||
+          tilePath.endsWith(".md") ||
+          existsSync(path.join(TILES_DIR, tilePath)) === false
+        ) {
+          return HttpServerResponse.empty({ status: 404 });
+        }
+        return yield* HttpServerResponse.file(
+          path.join(TILES_DIR, tilePath),
+        );
       }),
     );
     yield* router.add("GET", "/assets/*", (request) =>

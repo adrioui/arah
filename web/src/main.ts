@@ -112,6 +112,7 @@ const ArahMap = CustomElement.define({
     mapFocus: Schema.String,
     isochrone: Schema.String,
     basemap: Schema.String,
+    offline: Schema.String,
   },
   events: {},
 });
@@ -140,6 +141,7 @@ export const Model = Schema.Struct({
   preferProtected: Schema.Boolean,
   shareNotice: Schema.String,
   basemap: Basemap,
+  offline: Schema.Boolean,
 });
 export type Model = typeof Model.Type;
 
@@ -179,6 +181,7 @@ const Message = defineMessageUnion({
   SucceededShareCopy: {},
   FailedShareCopy: { error: Schema.String },
   SetBasemap: { basemap: Basemap },
+  ToggledOffline: {},
 });
 
 export { Message };
@@ -433,6 +436,9 @@ export const update = (model: Model, message: Message) =>
     SetBasemap: ({ basemap }) => ({
       model: evo(model, { basemap: () => basemap }),
     }),
+    ToggledOffline: () => ({
+      model: evo(model, { offline: (current) => current === false }),
+    }),
   });
 
 // INIT
@@ -460,6 +466,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
     preferProtected: false,
     shareNotice: "",
     basemap: "light",
+    offline: false,
   },
   commands: [FetchHealth()],
 });
@@ -855,6 +862,7 @@ const mapHost = (
             JSON.stringify(decision === undefined ? [] : (decision.isochrone ?? [])),
           ),
           arahMap.Basemap(model.basemap),
+          arahMap.Offline(model.offline ? "offline" : "online"),
         ],
         [],
       ),
@@ -1589,6 +1597,16 @@ const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
                           h.AriaPressed(model.basemap === "dark" ? "true" : "false"),
                         ],
                         [model.basemap === "dark" ? "Dark map" : "Light map"],
+                      ),
+                      h.button(
+                        [
+                          h.Class(
+                            `px-3 py-1.5 rounded-full border text-xs font-semibold transition ${model.offline ? "bg-amber-500 text-white border-amber-500" : "bg-white text-slate-600 border-slate-300"}`,
+                          ),
+                          h.OnClick(Message.ToggledOffline()),
+                          h.AriaPressed(model.offline ? "true" : "false"),
+                        ],
+                        [model.offline ? "Offline on" : "Offline"],
                       ),
                     ],
                   ),

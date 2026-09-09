@@ -61,6 +61,21 @@ const STYLE_URLS = {
 
 export type BasemapKind = keyof typeof STYLE_URLS;
 
+export type OfflineKind = "online" | "offline";
+
+const OFFLINE_STYLE = {
+  version: 8 as const,
+  name: "arah-offline",
+  sources: {},
+  layers: [
+    {
+      id: "background",
+      type: "background" as const,
+      paint: { "background-color": "#e2e8f0" },
+    },
+  ],
+};
+
 function coordinates(
   points: ReadonlyArray<{ readonly lat: number; readonly lon: number }>,
 ): Array<[number, number]> {
@@ -239,6 +254,7 @@ class ArahMapElement extends HTMLElement {
     [];
   #selected: string = "";
   #basemap: BasemapKind = "light";
+  #offline: OfflineKind = "online";
   #focus: string = "";
   #popup: maplibregl.Popup | null = null;
 
@@ -308,6 +324,23 @@ class ArahMapElement extends HTMLElement {
 
   get basemap(): string {
     return this.#basemap;
+  }
+
+  set offline(value: string) {
+    const next: OfflineKind = value === "offline" ? "offline" : "online";
+    if (next === this.#offline) {
+      return;
+    }
+    this.#offline = next;
+    if (this.#map !== null) {
+      this.#map.setStyle(
+        next === "offline" ? OFFLINE_STYLE : STYLE_URLS[this.#basemap],
+      );
+    }
+  }
+
+  get offline(): string {
+    return this.#offline;
   }
 
   set markers(value: string) {

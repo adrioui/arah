@@ -168,6 +168,21 @@ test("submitting a report sends feedback", () => {
   );
 });
 
+test("offline toggle flips", () => {
+  story(
+    update,
+    given(init().model),
+    message(Message.ToggledOffline()),
+    model((next) => {
+      expect(next.offline).toBe(true);
+    }),
+    message(Message.ToggledOffline()),
+    model((next) => {
+      expect(next.offline).toBe(false);
+    }),
+  );
+});
+
 test("basemap toggles with night and manual switch", () => {
   story(
     update,
