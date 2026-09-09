@@ -298,7 +298,11 @@ export const update = (model: Model, message: Message) =>
       }
       return {
         model: evo(model, {
-          decision: () => DecisionAsyncData.Loading(),
+          decision: () =>
+            Option.match(AsyncData.revalidate(model.decision), {
+              onNone: () => DecisionAsyncData.Loading(),
+              onSome: (refreshing) => refreshing,
+            }),
           maybeSelectedRouteId: () => Option.none(),
         }),
         commands: [
@@ -1090,6 +1094,46 @@ const layerToggles = (model: Model, h: HtmlBuilder<Message>): Html =>
     }),
   );
 
+const loadingStages: ReadonlyArray<string> = [
+  "Resolving places",
+  "Routing",
+  "Ranking routes",
+];
+
+const ghostCard = (h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [
+      h.Class(
+        "snap-start shrink-0 w-64 rounded-xl border border-slate-200 bg-white p-3 flex flex-col gap-2 animate-pulse",
+      ),
+    ],
+    [
+      h.div([h.Class("h-4 w-3/4 rounded bg-slate-200")], []),
+      h.div([h.Class("h-3 w-1/2 rounded bg-slate-100")], []),
+      h.div([h.Class("h-3 w-2/3 rounded bg-slate-100")], []),
+    ],
+  );
+
+const loadingView = (h: HtmlBuilder<Message>): Html =>
+  h.div([h.Class("flex flex-col gap-3")], [
+    h.ul(
+      [h.Class("flex flex-col gap-1.5")],
+      loadingStages.map((stage) =>
+        h.li([h.Class("flex items-center gap-2 text-sm text-emerald-800")], [
+          h.span(
+            [h.Class("h-2 w-2 rounded-full bg-emerald-500 animate-pulse")],
+            [],
+          ),
+          stage,
+        ]),
+      ),
+    ),
+    h.div([h.Class("flex gap-3 overflow-x-auto pb-1")], [
+      ghostCard(h),
+      ghostCard(h),
+    ]),
+  ]);
+
 const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.section(
     [
@@ -1111,11 +1155,7 @@ const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
                 [h.Class("text-sm text-slate-500 text-center")],
                 ["Pick a mode, enter places, and tap Find routes."],
               ),
-            onLoading: () =>
-              h.p(
-                [h.Class("text-sm text-emerald-700 font-medium text-center")],
-                ["Resolving places and ranking routes…"],
-              ),
+            onLoading: () => loadingView(h),
             onFailure: (error) =>
               h.div(
                 [
@@ -1135,6 +1175,14 @@ const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
               return h.div(
                 [h.Class("flex flex-col gap-3")],
                 [
+                  ...(AsyncData.isRefreshing(model.decision)
+                    ? [
+                        h.p(
+                          [h.Class("text-xs font-medium text-emerald-700")],
+                          ["Updating routes…"],
+                        ),
+                      ]
+                    : []),
                   layerToggles(model, h),
                   cards.length > 0
                     ? h.div(

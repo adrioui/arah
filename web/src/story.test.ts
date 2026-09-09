@@ -1,5 +1,6 @@
 import { Command, given, message, model, story } from "foldkit/story";
 import { expect, test } from "vitest";
+import type { DecisionOutput } from "@arah/domain";
 
 import {
   FetchDecision,
@@ -8,6 +9,23 @@ import {
   init,
   update,
 } from "./main.js";
+
+const plannedDecision: DecisionOutput = {
+  intent: "train",
+  ranked: [],
+  routes: [],
+  observations: [],
+  mapSnapshotId: "test-snapshot",
+  decidedAt: "2026-09-09T04:00:00.000Z",
+  resolved: {
+    origin: {
+      label: "Home",
+      point: { lat: -6.2842, lon: 106.7125 },
+      source: "registry",
+    },
+  },
+  routeSources: ["lushu"],
+};
 
 test("submitting a train search enters loading", () => {
   const initial = {
@@ -20,6 +38,28 @@ test("submitting a train search enters loading", () => {
     message(Message.SubmittedSearch()),
     model((next) => {
       expect(next.decision._tag).toBe("Loading");
+    }),
+    Command.resolve(
+      FetchDecision,
+      Message.FailedPlan({ error: "cancelled in test" }),
+    ),
+  );
+});
+
+test("resubmitting with prior results enters refreshing", () => {
+  const initial = {
+    ...init().model,
+    venueDraft: "alsut",
+  };
+  story(
+    update,
+    given(initial),
+    message(
+      Message.SucceededPlan({ decision: plannedDecision }),
+    ),
+    message(Message.SubmittedSearch()),
+    model((next) => {
+      expect(next.decision._tag).toBe("Refreshing");
     }),
     Command.resolve(
       FetchDecision,
