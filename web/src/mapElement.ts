@@ -5,8 +5,14 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 type LngLatTuple = [number, number];
-type LineGeometry = { readonly type: "LineString"; readonly coordinates: Array<LngLatTuple> };
-type PolygonGeometry = { readonly type: "Polygon"; readonly coordinates: Array<Array<LngLatTuple>> };
+type LineGeometry = {
+  readonly type: "LineString";
+  readonly coordinates: Array<LngLatTuple>;
+};
+type PolygonGeometry = {
+  readonly type: "Polygon";
+  readonly coordinates: Array<Array<LngLatTuple>>;
+};
 type MapFeature = {
   readonly type: "Feature";
   readonly properties: Record<string, string>;
@@ -21,7 +27,10 @@ export interface MapRoute {
   readonly id: string;
   readonly name: string;
   readonly kind: "loop" | "point-to-point";
-  readonly points: ReadonlyArray<{ readonly lat: number; readonly lon: number }>;
+  readonly points: ReadonlyArray<{
+    readonly lat: number;
+    readonly lon: number;
+  }>;
   readonly routeSource: string;
 }
 
@@ -29,11 +38,15 @@ export interface MapObservation {
   readonly id: string;
   readonly source: string;
   readonly severity: "severe" | "moderate" | "info";
-  readonly polygon: ReadonlyArray<{ readonly lat: number; readonly lon: number }>;
+  readonly polygon: ReadonlyArray<{
+    readonly lat: number;
+    readonly lon: number;
+  }>;
   readonly note: string;
 }
 
-const STYLE_URL = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+const STYLE_URL =
+  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 
 function coordinates(
   points: ReadonlyArray<{ readonly lat: number; readonly lon: number }>,
@@ -222,7 +235,10 @@ class ArahMapElement extends HTMLElement {
     this.fitBounds(this.#routes);
   }
 
-  private renderRoutes(routes: ReadonlyArray<MapRoute>, selectedId: string): void {
+  private renderRoutes(
+    routes: ReadonlyArray<MapRoute>,
+    selectedId: string,
+  ): void {
     const data = routesFeatureCollection(routes);
     const source = this.#map!.getSource<maplibregl.GeoJSONSource>("routes");
     if (source !== undefined) {
@@ -234,7 +250,11 @@ class ArahMapElement extends HTMLElement {
         type: "line",
         source: "routes",
         layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#0f766e", "line-width": 6, "line-opacity": 0.3 },
+        paint: {
+          "line-color": "#0f766e",
+          "line-width": 6,
+          "line-opacity": 0.3,
+        },
       });
       this.#map!.addLayer({
         id: "route-line",
@@ -247,7 +267,10 @@ class ArahMapElement extends HTMLElement {
     this.renderSelectedRoute(routes, selectedId);
   }
 
-  private renderSelectedRoute(routes: ReadonlyArray<MapRoute>, selectedId: string): void {
+  private renderSelectedRoute(
+    routes: ReadonlyArray<MapRoute>,
+    selectedId: string,
+  ): void {
     const selected = routes.find((route) => route.id === selectedId);
     if (selected === undefined) {
       if (this.#map!.getLayer("route-selected-line") !== undefined) {
@@ -262,7 +285,8 @@ class ArahMapElement extends HTMLElement {
       return;
     }
     const data = routesFeatureCollection([selected]);
-    const source = this.#map!.getSource<maplibregl.GeoJSONSource>("route-selected");
+    const source =
+      this.#map!.getSource<maplibregl.GeoJSONSource>("route-selected");
     if (source !== undefined) {
       source.setData(data);
       return;
@@ -284,9 +308,12 @@ class ArahMapElement extends HTMLElement {
     });
   }
 
-  private renderObservations(observations: ReadonlyArray<MapObservation>): void {
+  private renderObservations(
+    observations: ReadonlyArray<MapObservation>,
+  ): void {
     const data = observationsFeatureCollection(observations);
-    const source = this.#map!.getSource<maplibregl.GeoJSONSource>("observations");
+    const source =
+      this.#map!.getSource<maplibregl.GeoJSONSource>("observations");
     if (source !== undefined) {
       source.setData(data);
       return;

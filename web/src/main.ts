@@ -1,5 +1,9 @@
 import { Clock, Effect, Exit, Option, Schema } from "effect";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import {
+  HttpClient,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/unstable/http";
 import {
   DecisionOutput,
   PlaceSearchResponse,
@@ -51,7 +55,12 @@ const ServerPlanError = Schema.Struct({
 const Mode = Schema.Literals(["train", "go"]);
 type Mode = typeof Mode.Type;
 
-const SuggestionTarget = Schema.Literals(["none", "venue", "origin", "destination"]);
+const SuggestionTarget = Schema.Literals([
+  "none",
+  "venue",
+  "origin",
+  "destination",
+]);
 type SuggestionTarget = typeof SuggestionTarget.Type;
 
 const OverlayLayer = Schema.Literals(["flood", "closure", "weather"]);
@@ -217,7 +226,8 @@ export const update = (model: Model, message: Message) =>
       }
       return {
         model: evo(model, {
-          suggestions: () => SuggestionsAsyncData.Success({ data: [...suggestions] }),
+          suggestions: () =>
+            SuggestionsAsyncData.Success({ data: [...suggestions] }),
         }),
       };
     },
@@ -397,7 +407,10 @@ const failedPlanWithStatus = (
     }
   }
   return Message.FailedPlan({
-    error: body.length > 0 ? body.slice(0, 200) : `Server returned ${response.status}`,
+    error:
+      body.length > 0
+        ? body.slice(0, 200)
+        : `Server returned ${response.status}`,
   });
 };
 
@@ -519,7 +532,9 @@ const fetchHealth = Effect.gen(function* () {
   const response = yield* client.get("/api/health");
   if (response.status !== 200) {
     return yield* Effect.fail(
-      Message.FailedHealth({ error: `Health check failed (${response.status})` }),
+      Message.FailedHealth({
+        error: `Health check failed (${response.status})`,
+      }),
     );
   }
   const health = yield* Schema.decodeUnknownEffect(Health)(
@@ -578,7 +593,9 @@ const visibleObservations = (
 ): ReadonlyArray<MapObservation> => {
   const hiddenSources = hidden.flatMap((layer) => layerSources[layer]);
   return decision.observations
-    .filter((observation) => hiddenSources.includes(observation.source) === false)
+    .filter(
+      (observation) => hiddenSources.includes(observation.source) === false,
+    )
     .map((observation) => ({
       id: observation.id,
       source: observation.source,
@@ -603,21 +620,34 @@ const selectedRouteId = (model: Model): string =>
     onSome: (id) => id,
   });
 
-const mapHost = (model: Model, decision: DecisionOutput | undefined, h: HtmlBuilder<Message>): Html => {
+const mapHost = (
+  model: Model,
+  decision: DecisionOutput | undefined,
+  h: HtmlBuilder<Message>,
+): Html => {
   const arahMap = ArahMap.withMessage(h);
-  return h.div([h.Class("absolute inset-0")], [
-    arahMap(
-      [
-        h.Class("block h-full w-full"),
-        arahMap.Routes(JSON.stringify(decision === undefined ? [] : mapRoutes(decision))),
-        arahMap.Observations(
-          JSON.stringify(decision === undefined ? [] : visibleObservations(decision, model.hiddenLayers)),
-        ),
-        arahMap.Selected(selectedRouteId(model)),
-      ],
-      [],
-    ),
-  ]);
+  return h.div(
+    [h.Class("absolute inset-0")],
+    [
+      arahMap(
+        [
+          h.Class("block h-full w-full"),
+          arahMap.Routes(
+            JSON.stringify(decision === undefined ? [] : mapRoutes(decision)),
+          ),
+          arahMap.Observations(
+            JSON.stringify(
+              decision === undefined
+                ? []
+                : visibleObservations(decision, model.hiddenLayers),
+            ),
+          ),
+          arahMap.Selected(selectedRouteId(model)),
+        ],
+        [],
+      ),
+    ],
+  );
 };
 
 const suggestionList = (
@@ -638,20 +668,38 @@ const suggestionList = (
         return h.empty;
       }
       return h.ul(
-        [h.Class("rounded-lg border border-slate-200 bg-white shadow-sm divide-y divide-slate-100")],
+        [
+          h.Class(
+            "rounded-lg border border-slate-200 bg-white shadow-sm divide-y divide-slate-100",
+          ),
+        ],
         suggestions.map((suggestion) =>
-          h.keyed("li")(suggestion.id, [], [
-            h.button(
-              [
-                h.Class("w-full text-left px-3 py-2 hover:bg-emerald-50 transition"),
-                h.OnClick(Message.SelectedSuggestion({ id: suggestion.id, label: suggestion.label })),
-              ],
-              [
-                h.p([h.Class("text-sm font-medium text-slate-900")], [suggestion.label]),
-                h.p([h.Class("text-xs text-slate-500")], [suggestion.kind]),
-              ],
-            ),
-          ]),
+          h.keyed("li")(
+            suggestion.id,
+            [],
+            [
+              h.button(
+                [
+                  h.Class(
+                    "w-full text-left px-3 py-2 hover:bg-emerald-50 transition",
+                  ),
+                  h.OnClick(
+                    Message.SelectedSuggestion({
+                      id: suggestion.id,
+                      label: suggestion.label,
+                    }),
+                  ),
+                ],
+                [
+                  h.p(
+                    [h.Class("text-sm font-medium text-slate-900")],
+                    [suggestion.label],
+                  ),
+                  h.p([h.Class("text-xs text-slate-500")], [suggestion.kind]),
+                ],
+              ),
+            ],
+          ),
         ),
       );
     },
@@ -668,28 +716,38 @@ const placeField = (
   toMessage: (value: string) => Message,
   h: HtmlBuilder<Message>,
 ): Html =>
-  h.div([h.Class("flex flex-col gap-1")], [
-    h.label([h.Class("text-xs font-semibold uppercase tracking-wide text-slate-500")], [label]),
-    Input.view(
-      {
-        id,
-        value,
-        placeholder,
-        isDisabled: AsyncData.isPending(model.decision),
-        onInput: (next) => toMessage(next),
-        toView: (attributes) =>
-          h.input([
-            ...attributes.input,
-            h.Autocomplete("off"),
-            h.Class(
-              "w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:border-emerald-500 outline-none",
-            ),
-          ]),
-      },
-      h,
-    ),
-    suggestionList(model, target, h),
-  ]);
+  h.div(
+    [h.Class("flex flex-col gap-1")],
+    [
+      h.label(
+        [
+          h.Class(
+            "text-xs font-semibold uppercase tracking-wide text-slate-500",
+          ),
+        ],
+        [label],
+      ),
+      Input.view(
+        {
+          id,
+          value,
+          placeholder,
+          isDisabled: AsyncData.isPending(model.decision),
+          onInput: (next) => toMessage(next),
+          toView: (attributes) =>
+            h.input([
+              ...attributes.input,
+              h.Autocomplete("off"),
+              h.Class(
+                "w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:border-emerald-500 outline-none",
+              ),
+            ]),
+        },
+        h,
+      ),
+      suggestionList(model, target, h),
+    ],
+  );
 
 const sessionOptions: ReadonlyArray<{ value: TrainSession; label: string }> = [
   { value: "long", label: "Long" },
@@ -699,111 +757,175 @@ const sessionOptions: ReadonlyArray<{ value: TrainSession; label: string }> = [
 ];
 
 const trainFields = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.div([h.Class("flex flex-col gap-3")], [
-    placeField(model, "venue", "venue-search", "Training venue", "alsut, binloop, kemang…", model.venueDraft, (value) =>
-      Message.UpdatedVenue({ value }), h),
-    h.div([h.Class("grid grid-cols-2 gap-3")], [
-      h.div([h.Class("flex flex-col gap-1")], [
-        h.label([h.Class("text-xs font-semibold uppercase tracking-wide text-slate-500")], ["Session"]),
-        Select.view(
-          {
-            id: "train-session",
-            value: model.session,
-            isDisabled: AsyncData.isPending(model.decision),
-            onChange: (value) =>
-              Message.UpdatedSession({
-                session: sessionOptions.find((option) => option.value === value)?.value ?? "long",
-              }),
-            toView: (attributes) =>
-              h.select(
+  h.div(
+    [h.Class("flex flex-col gap-3")],
+    [
+      placeField(
+        model,
+        "venue",
+        "venue-search",
+        "Training venue",
+        "alsut, binloop, kemang…",
+        model.venueDraft,
+        (value) => Message.UpdatedVenue({ value }),
+        h,
+      ),
+      h.div(
+        [h.Class("grid grid-cols-2 gap-3")],
+        [
+          h.div(
+            [h.Class("flex flex-col gap-1")],
+            [
+              h.label(
                 [
-                  ...attributes.select,
                   h.Class(
-                    "w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:border-emerald-500 outline-none",
+                    "text-xs font-semibold uppercase tracking-wide text-slate-500",
                   ),
                 ],
-                sessionOptions.map((option) =>
-                  h.option(
-                    [
-                      h.Value(option.value),
-                      ...(option.value === model.session ? [h.Selected(true)] : []),
-                    ],
-                    [option.label],
-                  ),
-                ),
+                ["Session"],
               ),
-          },
-          h,
-        ),
-      ]),
-      h.div([h.Class("flex flex-col gap-1")], [
-        h.label([h.Class("text-xs font-semibold uppercase tracking-wide text-slate-500")], ["Minutes"]),
-        h.div([h.Class("flex items-center gap-1")], [
-          h.button(
-            [
-              h.Class("px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50"),
-              h.OnClick(Message.ClickedMinutesDecrement()),
-              h.AriaLabel("Fewer minutes"),
+              Select.view(
+                {
+                  id: "train-session",
+                  value: model.session,
+                  isDisabled: AsyncData.isPending(model.decision),
+                  onChange: (value) =>
+                    Message.UpdatedSession({
+                      session:
+                        sessionOptions.find((option) => option.value === value)
+                          ?.value ?? "long",
+                    }),
+                  toView: (attributes) =>
+                    h.select(
+                      [
+                        ...attributes.select,
+                        h.Class(
+                          "w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:border-emerald-500 outline-none",
+                        ),
+                      ],
+                      sessionOptions.map((option) =>
+                        h.option(
+                          [
+                            h.Value(option.value),
+                            ...(option.value === model.session
+                              ? [h.Selected(true)]
+                              : []),
+                          ],
+                          [option.label],
+                        ),
+                      ),
+                    ),
+                },
+                h,
+              ),
             ],
-            ["−"],
           ),
-          Input.view(
-            {
-              id: "train-minutes",
-              value: String(model.minutes),
-              type: "number",
-              isDisabled: AsyncData.isPending(model.decision),
-              onInput: (value) => Message.UpdatedMinutes({ value }),
-              toView: (attributes) =>
-                h.input([
-                  ...attributes.input,
+          h.div(
+            [h.Class("flex flex-col gap-1")],
+            [
+              h.label(
+                [
                   h.Class(
-                    "w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-center focus:border-emerald-500 outline-none",
+                    "text-xs font-semibold uppercase tracking-wide text-slate-500",
                   ),
-                ]),
-            },
-            h,
-          ),
-          h.button(
-            [
-              h.Class("px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50"),
-              h.OnClick(Message.ClickedMinutesIncrement()),
-              h.AriaLabel("More minutes"),
+                ],
+                ["Minutes"],
+              ),
+              h.div(
+                [h.Class("flex items-center gap-1")],
+                [
+                  h.button(
+                    [
+                      h.Class(
+                        "px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50",
+                      ),
+                      h.OnClick(Message.ClickedMinutesDecrement()),
+                      h.AriaLabel("Fewer minutes"),
+                    ],
+                    ["−"],
+                  ),
+                  Input.view(
+                    {
+                      id: "train-minutes",
+                      value: String(model.minutes),
+                      type: "number",
+                      isDisabled: AsyncData.isPending(model.decision),
+                      onInput: (value) => Message.UpdatedMinutes({ value }),
+                      toView: (attributes) =>
+                        h.input([
+                          ...attributes.input,
+                          h.Class(
+                            "w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-center focus:border-emerald-500 outline-none",
+                          ),
+                        ]),
+                    },
+                    h,
+                  ),
+                  h.button(
+                    [
+                      h.Class(
+                        "px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50",
+                      ),
+                      h.OnClick(Message.ClickedMinutesIncrement()),
+                      h.AriaLabel("More minutes"),
+                    ],
+                    ["+"],
+                  ),
+                ],
+              ),
             ],
-            ["+"],
           ),
-        ]),
-      ]),
-    ]),
-    h.button(
-      [
-        h.Class(
-          `self-start px-3 py-1.5 rounded-full border text-xs font-semibold transition ${model.night ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-300"}`,
-        ),
-        h.OnClick(Message.ToggledNight()),
-        h.AriaPressed(model.night ? "true" : "false"),
-      ],
-      [model.night ? "Night ride on" : "Night ride off"],
-    ),
-  ]);
+        ],
+      ),
+      h.button(
+        [
+          h.Class(
+            `self-start px-3 py-1.5 rounded-full border text-xs font-semibold transition ${model.night ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-300"}`,
+          ),
+          h.OnClick(Message.ToggledNight()),
+          h.AriaPressed(model.night ? "true" : "false"),
+        ],
+        [model.night ? "Night ride on" : "Night ride off"],
+      ),
+    ],
+  );
 
 const goFields = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.div([h.Class("flex flex-col gap-3")], [
-    placeField(model, "origin", "origin-search", "From", "home", model.originDraft, (value) =>
-      Message.UpdatedOrigin({ value }), h),
-    placeField(model, "destination", "destination-search", "To", "oksigasi, kemang, senayan…", model.destinationDraft, (value) =>
-      Message.UpdatedDestination({ value }), h),
-    h.button(
-      [
-        h.Class(
-          `self-start px-3 py-1.5 rounded-full border text-xs font-semibold transition ${model.night ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-300"}`,
-        ),
-        h.OnClick(Message.ToggledNight()),
-        h.AriaPressed(model.night ? "true" : "false"),
-      ],
-      [model.night ? "Night ride on" : "Night ride off"],
-    ),
-  ]);
+  h.div(
+    [h.Class("flex flex-col gap-3")],
+    [
+      placeField(
+        model,
+        "origin",
+        "origin-search",
+        "From",
+        "home",
+        model.originDraft,
+        (value) => Message.UpdatedOrigin({ value }),
+        h,
+      ),
+      placeField(
+        model,
+        "destination",
+        "destination-search",
+        "To",
+        "oksigasi, kemang, senayan…",
+        model.destinationDraft,
+        (value) => Message.UpdatedDestination({ value }),
+        h,
+      ),
+      h.button(
+        [
+          h.Class(
+            `self-start px-3 py-1.5 rounded-full border text-xs font-semibold transition ${model.night ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-300"}`,
+          ),
+          h.OnClick(Message.ToggledNight()),
+          h.AriaPressed(model.night ? "true" : "false"),
+        ],
+        [model.night ? "Night ride on" : "Night ride off"],
+      ),
+    ],
+  );
 
 const modeTab = (
   model: Model,
@@ -832,44 +954,73 @@ const statusLine = (model: Model): string =>
   });
 
 const searchHeader = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.header([h.Class("absolute inset-x-0 top-0 z-10 p-3 sm:p-4")], [
-    h.div(
-      [h.Class("max-w-2xl mx-auto rounded-2xl border border-white/60 bg-white/95 shadow-lg backdrop-blur p-4 flex flex-col gap-3")],
-      [
-        h.div([h.Class("flex items-baseline justify-between gap-3")], [
-          h.h1([h.Class("text-2xl font-black tracking-tight text-emerald-950")], ["arah"]),
-          h.p([h.Class("text-xs text-slate-500")], [statusLine(model)]),
-        ]),
-        h.div([h.Class("flex gap-1 rounded-xl bg-slate-100 p-1")], [
-          modeTab(model, "train", "Train", h),
-          modeTab(model, "go", "Go", h),
-        ]),
-        h.form(
-          [h.OnSubmit(Message.SubmittedSearch()), h.Class("flex flex-col gap-3")],
-          [
-            model.mode === "train" ? trainFields(model, h) : goFields(model, h),
-            Button.view(
-              {
-                type: "submit",
-                isDisabled: AsyncData.isPending(model.decision),
-                toView: (attributes) =>
-                  h.button(
-                    [
-                      ...attributes.button,
-                      h.Class(
-                        "w-full px-6 py-2.5 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition data-[disabled]:opacity-50",
-                      ),
-                    ],
-                    [AsyncData.isPending(model.decision) ? "Planning…" : "Find routes"],
+  h.header(
+    [h.Class("absolute inset-x-0 top-0 z-10 p-3 sm:p-4")],
+    [
+      h.div(
+        [
+          h.Class(
+            "max-w-2xl mx-auto rounded-2xl border border-white/60 bg-white/95 shadow-lg backdrop-blur p-4 flex flex-col gap-3",
+          ),
+        ],
+        [
+          h.div(
+            [h.Class("flex items-baseline justify-between gap-3")],
+            [
+              h.h1(
+                [
+                  h.Class(
+                    "text-2xl font-black tracking-tight text-emerald-950",
                   ),
-              },
-              h,
-            ),
-          ],
-        ),
-      ],
-    ),
-  ]);
+                ],
+                ["arah"],
+              ),
+              h.p([h.Class("text-xs text-slate-500")], [statusLine(model)]),
+            ],
+          ),
+          h.div(
+            [h.Class("flex gap-1 rounded-xl bg-slate-100 p-1")],
+            [
+              modeTab(model, "train", "Train", h),
+              modeTab(model, "go", "Go", h),
+            ],
+          ),
+          h.form(
+            [
+              h.OnSubmit(Message.SubmittedSearch()),
+              h.Class("flex flex-col gap-3"),
+            ],
+            [
+              model.mode === "train"
+                ? trainFields(model, h)
+                : goFields(model, h),
+              Button.view(
+                {
+                  type: "submit",
+                  isDisabled: AsyncData.isPending(model.decision),
+                  toView: (attributes) =>
+                    h.button(
+                      [
+                        ...attributes.button,
+                        h.Class(
+                          "w-full px-6 py-2.5 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition data-[disabled]:opacity-50",
+                        ),
+                      ],
+                      [
+                        AsyncData.isPending(model.decision)
+                          ? "Planning…"
+                          : "Find routes",
+                      ],
+                    ),
+                },
+                h,
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
 
 const routeCard = (
   model: Model,
@@ -899,20 +1050,31 @@ const routeCard = (
       h.OnClick(Message.SelectedRoute({ routeId })),
     ],
     [
-      h.div([h.Class("flex items-start justify-between gap-2")], [
-        h.p([h.Class("text-sm font-semibold text-slate-900")], [ranked.routeName]),
-        h.span(
-          [h.Class(`text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded border ${verdictClass(ranked.verdict)}`)],
-          [ranked.verdict],
-        ),
-      ]),
+      h.div(
+        [h.Class("flex items-start justify-between gap-2")],
+        [
+          h.p(
+            [h.Class("text-sm font-semibold text-slate-900")],
+            [ranked.routeName],
+          ),
+          h.span(
+            [
+              h.Class(
+                `text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded border ${verdictClass(ranked.verdict)}`,
+              ),
+            ],
+            [ranked.verdict],
+          ),
+        ],
+      ),
       h.p([h.Class("text-xs text-slate-600")], [meta.join(" · ")]),
     ],
   );
 };
 
 const layerToggles = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.div([h.Class("flex gap-1.5 flex-wrap")],
+  h.div(
+    [h.Class("flex gap-1.5 flex-wrap")],
     (["flood", "closure", "weather"] as const).map((layer) => {
       const hidden = model.hiddenLayers.includes(layer);
       return h.button(
@@ -929,56 +1091,84 @@ const layerToggles = (model: Model, h: HtmlBuilder<Message>): Html =>
   );
 
 const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.section([h.Class("absolute inset-x-0 bottom-0 z-10 flex justify-center p-3 sm:p-4 pointer-events-none")], [
-    h.div(
-      [h.Class("pointer-events-auto w-full max-w-2xl max-h-[44dvh] overflow-y-auto rounded-2xl border border-white/60 bg-white/95 shadow-lg backdrop-blur p-4")],
-      [
-        AsyncData.matchDataSplitEmpty(model.decision, {
-          onIdle: () =>
-            h.p(
-              [h.Class("text-sm text-slate-500 text-center")],
-              ["Pick a mode, enter places, and tap Find routes."],
-            ),
-          onLoading: () =>
-            h.p(
-              [h.Class("text-sm text-emerald-700 font-medium text-center")],
-              ["Resolving places and ranking routes…"],
-            ),
-          onFailure: (error) =>
-            h.div(
-              [h.Class("rounded-lg border border-rose-300 bg-rose-50 text-rose-800 px-4 py-3 text-sm")],
-              [error],
-            ),
-          onData: (decision) => {
-            const cards = decision.ranked
-              .map((ranked) => routeCard(model, decision, ranked.routeId, h))
-              .filter((card): card is Html => card !== undefined);
-            const active = decision.ranked.find(
-              (row) => row.routeId === selectedRouteId(model),
-            );
-            return h.div([h.Class("flex flex-col gap-3")], [
-              layerToggles(model, h),
-              cards.length > 0
-                ? h.div([h.Class("flex gap-3 overflow-x-auto pb-1 snap-x")], cards)
-                : h.p([h.Class("text-sm text-slate-500")], ["No routes ranked."]),
-              active !== undefined && active.reasons.length > 0
-                ? h.ul(
-                    [h.Class("text-sm text-slate-700 list-disc pl-5 space-y-1")],
-                    active.reasons.map((reason) => h.li([], [reason])),
-                  )
-                : h.empty,
+  h.section(
+    [
+      h.Class(
+        "absolute inset-x-0 bottom-0 z-10 flex justify-center p-3 sm:p-4 pointer-events-none",
+      ),
+    ],
+    [
+      h.div(
+        [
+          h.Class(
+            "pointer-events-auto w-full max-w-2xl max-h-[44dvh] overflow-y-auto rounded-2xl border border-white/60 bg-white/95 shadow-lg backdrop-blur p-4",
+          ),
+        ],
+        [
+          AsyncData.matchDataSplitEmpty(model.decision, {
+            onIdle: () =>
               h.p(
-                [h.Class("text-xs text-slate-500")],
-                [
-                  `Sources: ${decision.routeSources.join(", ")} · snapshot ${decision.mapSnapshotId}`,
-                ],
+                [h.Class("text-sm text-slate-500 text-center")],
+                ["Pick a mode, enter places, and tap Find routes."],
               ),
-            ]);
-          },
-        }),
-      ],
-    ),
-  ]);
+            onLoading: () =>
+              h.p(
+                [h.Class("text-sm text-emerald-700 font-medium text-center")],
+                ["Resolving places and ranking routes…"],
+              ),
+            onFailure: (error) =>
+              h.div(
+                [
+                  h.Class(
+                    "rounded-lg border border-rose-300 bg-rose-50 text-rose-800 px-4 py-3 text-sm",
+                  ),
+                ],
+                [error],
+              ),
+            onData: (decision) => {
+              const cards = decision.ranked
+                .map((ranked) => routeCard(model, decision, ranked.routeId, h))
+                .filter((card): card is Html => card !== undefined);
+              const active = decision.ranked.find(
+                (row) => row.routeId === selectedRouteId(model),
+              );
+              return h.div(
+                [h.Class("flex flex-col gap-3")],
+                [
+                  layerToggles(model, h),
+                  cards.length > 0
+                    ? h.div(
+                        [h.Class("flex gap-3 overflow-x-auto pb-1 snap-x")],
+                        cards,
+                      )
+                    : h.p(
+                        [h.Class("text-sm text-slate-500")],
+                        ["No routes ranked."],
+                      ),
+                  active !== undefined && active.reasons.length > 0
+                    ? h.ul(
+                        [
+                          h.Class(
+                            "text-sm text-slate-700 list-disc pl-5 space-y-1",
+                          ),
+                        ],
+                        active.reasons.map((reason) => h.li([], [reason])),
+                      )
+                    : h.empty,
+                  h.p(
+                    [h.Class("text-xs text-slate-500")],
+                    [
+                      `Sources: ${decision.routeSources.join(", ")} · snapshot ${decision.mapSnapshotId}`,
+                    ],
+                  ),
+                ],
+              );
+            },
+          }),
+        ],
+      ),
+    ],
+  );
 
 const currentDecision = (model: Model): DecisionOutput | undefined =>
   AsyncData.matchDataSplitEmpty(model.decision, {
@@ -991,7 +1181,11 @@ const currentDecision = (model: Model): DecisionOutput | undefined =>
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: "arah",
   body: h.div(
-    [h.Class("relative h-[100dvh] w-full overflow-hidden bg-slate-100 text-slate-900")],
+    [
+      h.Class(
+        "relative h-[100dvh] w-full overflow-hidden bg-slate-100 text-slate-900",
+      ),
+    ],
     [
       mapHost(model, currentDecision(model), h),
       searchHeader(model, h),

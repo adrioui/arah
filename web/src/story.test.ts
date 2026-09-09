@@ -1,7 +1,13 @@
 import { Command, given, message, model, story } from "foldkit/story";
 import { expect, test } from "vitest";
 
-import { FetchDecision, FetchSuggestions, Message, init, update } from "./main.js";
+import {
+  FetchDecision,
+  FetchSuggestions,
+  Message,
+  init,
+  update,
+} from "./main.js";
 
 test("submitting a train search enters loading", () => {
   const initial = {
@@ -64,7 +70,9 @@ test("selecting a venue suggestion fills the draft", () => {
   story(
     update,
     given(initial),
-    message(Message.SelectedSuggestion({ id: "alsut-loop", label: "Alsut loop" })),
+    message(
+      Message.SelectedSuggestion({ id: "alsut-loop", label: "Alsut loop" }),
+    ),
     model((next) => {
       expect(next.venueDraft).toBe("Alsut loop");
       expect(next.suggestFor).toBe("none");
