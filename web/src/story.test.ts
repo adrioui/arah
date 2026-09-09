@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import type { DecisionOutput } from "@arah/domain";
 
 import {
+  CopyShare,
   FetchDecision,
   FetchFeedback,
   FetchSuggestions,
@@ -163,6 +164,18 @@ test("submitting a report sends feedback", () => {
     model((next) => {
       expect(next.report._tag).toBe("Success");
       expect(next.reportDraft).toBe("");
+    }),
+  );
+});
+
+test("copying a share link shows confirmation", () => {
+  story(
+    update,
+    given(init().model),
+    message(Message.CopyShareLink({ text: "https://x.test#plan=abc" })),
+    Command.resolve(CopyShare, Message.SucceededShareCopy()),
+    model((next) => {
+      expect(next.shareNotice).toBe("Link copied.");
     }),
   );
 });

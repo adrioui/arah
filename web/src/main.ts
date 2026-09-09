@@ -23,6 +23,7 @@ import { defineMessageUnion } from "foldkit/message";
 import { evo } from "foldkit/struct";
 import { Button, Input } from "@foldkit/ui";
 import { gpxDownload } from "./gpx.js";
+import { buildShareLink } from "./share.js";
 import {
   registerArahMap,
   type MapMarker,
@@ -133,6 +134,7 @@ export const Model = Schema.Struct({
   hillComfort: HillComfort,
   avoidUnlit: Schema.Boolean,
   preferProtected: Schema.Boolean,
+  shareNotice: Schema.String,
 });
 export type Model = typeof Model.Type;
 
@@ -168,6 +170,9 @@ const Message = defineMessageUnion({
   UpdatedHillComfort: { comfort: HillComfort },
   ToggledAvoidUnlit: {},
   ToggledPreferProtected: {},
+  CopyShareLink: { text: Schema.String },
+  SucceededShareCopy: {},
+  FailedShareCopy: { error: Schema.String },
 });
 
 export { Message };
@@ -406,6 +411,16 @@ export const update = (model: Model, message: Message) =>
     ToggledPreferProtected: () => ({
       model: evo(model, { preferProtected: (current) => current === false }),
     }),
+    CopyShareLink: ({ text }) => ({
+      model,
+      commands: [CopyShare({ text })],
+    }),
+    SucceededShareCopy: () => ({
+      model: evo(model, { shareNotice: () => "Link copied." }),
+    }),
+    FailedShareCopy: ({ error }) => ({
+      model: evo(model, { shareNotice: () => error }),
+    }),
   });
 
 // INIT
@@ -431,6 +446,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
     hillComfort: "mixed",
     avoidUnlit: false,
     preferProtected: false,
+    shareNotice: "",
   },
   commands: [FetchHealth()],
 });
@@ -647,6 +663,35 @@ const fetchFeedbackEffect = (args: {
     ),
     Effect.provide(Http.layer),
   );
+
+const copyShareEffect = (text: string) =>
+  Effect.gen(function* () {
+    const clipboard = navigator.clipboard;
+    if (clipboard === undefined) {
+      return yield* Effect.fail(
+        Message.FailedShareCopy({ error: "Clipboard unavailable." }),
+      );
+    }
+    yield* Effect.tryPromise({
+      try: () => clipboard.writeText(text),
+      catch: () =>
+        Message.FailedShareCopy({ error: "Could not copy the link." }),
+    });
+    return Message.SucceededShareCopy();
+  }).pipe(
+    Effect.catchTag("FailedShareCopy", (error) => Effect.succeed(error)),
+    Effect.catch(() =>
+      Effect.succeed(
+        Message.FailedShareCopy({ error: "Could not copy the link." }),
+      ),
+    ),
+  );
+
+export const CopyShare = Command.define("CopyShare", {
+  args: { text: Schema.String },
+  messages: [Message.SucceededShareCopy, Message.FailedShareCopy],
+  execute: ({ text }) => copyShareEffect(text),
+});
 
 export const FetchFeedback = Command.define("FetchFeedback", {
   args: {
@@ -1245,6 +1290,43 @@ const legend = (h: HtmlBuilder<Message>): Html =>
     ],
   );
 
+const shareRow = (
+  model: Model,
+  decision: DecisionOutput,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const link = buildShareLink(window.location.origin, {
+    origin: decision.resolved.origin.label,
+    destination: decision.resolved.destination.label,
+    routeId: selectedRouteId(model) || undefined,
+  });
+  return h.div([h.Class("flex flex-col gap-1.5")], [
+    h.div([h.Class("flex items-center gap-1.5")], [
+      h.p(
+        [h.Class("flex-1 truncate text-[11px] text-slate-500")],
+        [link],
+      ),
+      h.button(
+        [
+          h.Class(
+            "px-2.5 py-1 rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600",
+          ),
+          h.OnClick(Message.CopyShareLink({ text: link })),
+        ],
+        ["Copy link"],
+      ),
+    ]),
+    ...(model.shareNotice.length > 0
+      ? [
+          h.p(
+            [h.Class("text-[11px] text-emerald-700")],
+            [model.shareNotice],
+          ),
+        ]
+      : []),
+  ]);
+};
+
 const exportGpxLink = (
   decision: DecisionOutput,
   routeId: string | undefined,
@@ -1479,6 +1561,7 @@ const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
                   ),
                   verdictChips(model, h),
                   exportGpxLink(decision, active?.routeId, h),
+                  shareRow(model, decision, h),
                   cards.length > 0
                     ? h.div(
                         [h.Class("flex gap-3 overflow-x-auto pb-1 snap-x")],
