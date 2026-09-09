@@ -164,10 +164,28 @@ async function verifyBase(base: string, label: string): Promise<void> {
   if (!js.includes("Find routes") || !js.includes("arah-map")) {
     fail(`${jsPath} does not look like the arah bundle`);
   }
+  for (const marker of [
+    "Export GPX",
+    "Copy link",
+    "Offline",
+    "Resolving places",
+    "Solo",
+  ]) {
+    if (!js.includes(marker)) {
+      fail(`${jsPath} is missing the ${marker} surface`);
+    }
+    pass(`bundle carries ${marker}`);
+  }
   if (css.length === 0) {
     fail(`${cssPath} was empty`);
   }
   pass(`SPA ${jsPath} + ${cssPath}`);
+
+  const tiles = await fetchResponse(`${base}/tiles/jabodetabek.pmtiles`);
+  if (tiles.status !== 404) {
+    fail(`tiles without an archive returned ${tiles.status}, expected 404`);
+  }
+  pass("tiles without an archive → 404");
 
   const openapi = await fetchOk(`${base}/openapi.json`);
   const spec = await openapi.json();
