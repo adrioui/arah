@@ -11,7 +11,7 @@ import {
 } from "./domain.js";
 import { decide } from "./decide.js";
 import { sampleRouteElevation } from "./elevation.js";
-import { rankGoRoutes } from "./fit.js";
+import { rankGoRoutes, rankOptionsFrom } from "./fit.js";
 import { ObservationState, fetchFlood, fetchNowcast } from "./observations.js";
 import { PlaceNotFound, PlaceResolver } from "./placeResolve.js";
 import { Places } from "./places.js";
@@ -244,7 +244,11 @@ export class PlanRide extends Context.Service<
             nowMs,
           );
 
-          const rankedBase = rankGoRoutes(hazard.ranked, candidates);
+          const rankedBase = rankGoRoutes(
+            hazard.ranked,
+            candidates,
+            rankOptionsFrom(request.preferences, request.night),
+          );
           const ranked =
             isLiveWeather() === false
               ? rankedBase

@@ -163,6 +163,16 @@ export const CoverageEntry = Schema.Struct({
 });
 export type CoverageEntry = Schema.Schema.Type<typeof CoverageEntry>;
 
+/** Rider comfort preferences. All fields optional with sane defaults. */
+export const RidePreference = Schema.Struct({
+  hills: Schema.optional(Schema.Number.pipe(
+    Schema.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1)),
+  )),
+  avoidUnlit: Schema.optional(Schema.Boolean),
+  preferProtected: Schema.optional(Schema.Boolean),
+});
+export type RidePreference = Schema.Schema.Type<typeof RidePreference>;
+
 /** A destination ride request. */
 export const GoRequest = Schema.Struct({
   kind: Schema.Literal("go"),
@@ -170,6 +180,7 @@ export const GoRequest = Schema.Struct({
   destination: PlaceInput,
   departAt: DepartAt,
   night: Schema.Boolean,
+  preferences: Schema.optional(RidePreference),
 });
 export type GoRequest = Schema.Schema.Type<typeof GoRequest>;
 

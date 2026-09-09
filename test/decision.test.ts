@@ -89,6 +89,51 @@ function makeCoverage(state: CoverageEntry["state"]): CoverageEntry {
 
 
 describe("rankGoRoutes", () => {
+  it("prefers lit protected routes when preferences ask", () => {
+    const routes = [
+      makeRoute({
+        id: routeId("dark-shared"),
+        name: "dark shared",
+        lighting: "unlit",
+        laneKind: "shared",
+        distanceKm: 5,
+        climbM: 10,
+      }),
+      makeRoute({
+        id: routeId("lit-protected"),
+        name: "lit protected",
+        lighting: "lit",
+        laneKind: "protected",
+        distanceKm: 6,
+        climbM: 10,
+      }),
+    ];
+    const hazard = decide(
+      {
+        request: goRequest,
+        routes,
+        observations: [],
+        coverages: [makeCoverage("covered")],
+        mapSnapshotId: "snap-1",
+      },
+      NOW,
+    );
+    const plain = rankGoRoutes(hazard.ranked, routes);
+    expect(plain[0]?.routeId).toBe("dark-shared");
+    const ranked = rankGoRoutes(hazard.ranked, routes, {
+      hills: 1,
+      avoidUnlit: true,
+      preferProtected: true,
+      night: true,
+    });
+    expect(ranked[0]?.routeId).toBe("lit-protected");
+    expect(
+      ranked.find((row) => row.routeId === "dark-shared")?.reasons.some((row) =>
+        row.startsWith("pref:"),
+      ),
+    ).toBe(true);
+  });
+
   it("adds reach notes and sorts by verdict then time", () => {
     const routes = [
       makeRoute({ id: routeId("a-clear"), name: "a clear route" }),

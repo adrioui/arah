@@ -77,6 +77,15 @@ type VerdictFilter = typeof VerdictFilter.Type;
 const ReportKind = Schema.Literals(["hazard", "closure", "praise"]);
 type ReportKind = typeof ReportKind.Type;
 
+const HillComfort = Schema.Literals(["flat", "mixed", "climber"]);
+type HillComfort = typeof HillComfort.Type;
+
+const hillComfortValue: Record<HillComfort, number> = {
+  flat: 0,
+  mixed: 0.5,
+  climber: 1,
+};
+
 const ReportResponse = Schema.Struct({
   received: Schema.Boolean,
 });
@@ -120,6 +129,9 @@ export const Model = Schema.Struct({
   reportKind: ReportKind,
   reportDraft: Schema.String,
   report: ReportAsyncData.schema,
+  hillComfort: HillComfort,
+  avoidUnlit: Schema.Boolean,
+  preferProtected: Schema.Boolean,
 });
 export type Model = typeof Model.Type;
 
@@ -152,6 +164,9 @@ const Message = defineMessageUnion({
   SubmittedReport: {},
   SucceededReport: {},
   FailedReport: { error: Schema.String },
+  UpdatedHillComfort: { comfort: HillComfort },
+  ToggledAvoidUnlit: {},
+  ToggledPreferProtected: {},
 });
 
 export { Message };
@@ -271,6 +286,9 @@ export const update = (model: Model, message: Message) =>
             origin: model.originDraft.trim(),
             destination: model.destinationDraft.trim(),
             night: model.night,
+            hills: hillComfortValue[model.hillComfort] ?? 0.5,
+            avoidUnlit: model.avoidUnlit,
+            preferProtected: model.preferProtected,
           }),
         ],
       };
@@ -378,6 +396,15 @@ export const update = (model: Model, message: Message) =>
         report: () => ReportAsyncData.Failure({ error }),
       }),
     }),
+    UpdatedHillComfort: ({ comfort }) => ({
+      model: evo(model, { hillComfort: () => comfort }),
+    }),
+    ToggledAvoidUnlit: () => ({
+      model: evo(model, { avoidUnlit: (current) => current === false }),
+    }),
+    ToggledPreferProtected: () => ({
+      model: evo(model, { preferProtected: (current) => current === false }),
+    }),
   });
 
 // INIT
@@ -400,6 +427,9 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
     reportKind: "hazard",
     reportDraft: "",
     report: ReportAsyncData.Idle(),
+    hillComfort: "mixed",
+    avoidUnlit: false,
+    preferProtected: false,
   },
   commands: [FetchHealth()],
 });
@@ -442,6 +472,9 @@ const fetchDecisionEffect = (args: {
   origin: string;
   destination: string;
   night: boolean;
+  hills: number;
+  avoidUnlit: boolean;
+  preferProtected: boolean;
 }) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
@@ -453,6 +486,11 @@ const fetchDecisionEffect = (args: {
       destination: args.destination,
       departAt,
       night: args.night,
+      preferences: {
+        hills: args.hills,
+        avoidUnlit: args.avoidUnlit,
+        preferProtected: args.preferProtected,
+      },
     };
     const httpRequest = HttpClientRequest.post("/api/decide").pipe(
       HttpClientRequest.acceptJson,
@@ -487,6 +525,9 @@ export const FetchDecision = Command.define("FetchDecision", {
     origin: Schema.String,
     destination: Schema.String,
     night: Schema.Boolean,
+    hills: Schema.Number,
+    avoidUnlit: Schema.Boolean,
+    preferProtected: Schema.Boolean,
   },
   messages: [Message.SucceededPlan, Message.FailedPlan],
   execute: (args) => fetchDecisionEffect(args),
@@ -880,6 +921,45 @@ const goFields = (model: Model, h: HtmlBuilder<Message>): Html =>
         model.destinationDraft,
         (value) => Message.UpdatedDestination({ value }),
         h,
+      ),
+      h.div(
+        [h.Class("flex gap-1.5 flex-wrap")],
+        [
+          ...(["flat", "mixed", "climber"] as const).map((comfort) =>
+            h.button(
+              [
+                h.Class(
+                  `px-2.5 py-1 rounded-full border text-xs font-semibold transition ${model.hillComfort === comfort ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-300"}`,
+                ),
+                h.OnClick(Message.UpdatedHillComfort({ comfort })),
+                h.AriaPressed(
+                  model.hillComfort === comfort ? "true" : "false",
+                ),
+              ],
+              [`Hills: ${comfort}`],
+            ),
+          ),
+          h.button(
+            [
+              h.Class(
+                `px-2.5 py-1 rounded-full border text-xs font-semibold transition ${model.avoidUnlit ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-300"}`,
+              ),
+              h.OnClick(Message.ToggledAvoidUnlit()),
+              h.AriaPressed(model.avoidUnlit ? "true" : "false"),
+            ],
+            ["Avoid unlit"],
+          ),
+          h.button(
+            [
+              h.Class(
+                `px-2.5 py-1 rounded-full border text-xs font-semibold transition ${model.preferProtected ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-300"}`,
+              ),
+              h.OnClick(Message.ToggledPreferProtected()),
+              h.AriaPressed(model.preferProtected ? "true" : "false"),
+            ],
+            ["Prefer protected"],
+          ),
+        ],
       ),
       h.button(
         [

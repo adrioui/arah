@@ -167,6 +167,25 @@ test("submitting a report sends feedback", () => {
   );
 });
 
+test("preference controls update the model", () => {
+  story(
+    update,
+    given(init().model),
+    message(Message.UpdatedHillComfort({ comfort: "climber" })),
+    model((next) => {
+      expect(next.hillComfort).toBe("climber");
+    }),
+    message(Message.ToggledAvoidUnlit()),
+    model((next) => {
+      expect(next.avoidUnlit).toBe(true);
+    }),
+    message(Message.ToggledPreferProtected()),
+    model((next) => {
+      expect(next.preferProtected).toBe(true);
+    }),
+  );
+});
+
 test("toggling a layer hides and restores it", () => {
   story(
     update,
