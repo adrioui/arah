@@ -439,6 +439,7 @@ class ArahMapElement extends HTMLElement {
     const source =
       this.#map!.getSource<maplibregl.GeoJSONSource>("markers");
     if (source !== undefined) {
+      // SAFETY: point features match the GeoJSON the markers source was built with.
       source.setData(data as never);
       return;
     }
@@ -486,6 +487,7 @@ class ArahMapElement extends HTMLElement {
     if (feature === undefined) {
       return;
     }
+    // SAFETY: GeoJSON feature properties decode as string maps from our source.
     const props = feature.properties as Record<string, string>;
     const observed = props["observedAt"];
     this.#popup?.remove();
@@ -510,12 +512,14 @@ class ArahMapElement extends HTMLElement {
       this.fitBounds(this.#routes);
       return;
     }
-    const layerSources: Record<string, ReadonlyArray<string>> = {
+    const layerSources = {
       flood: ["flood"],
       closure: ["closure"],
       weather: ["bmkg", "nowcast", "air"],
-    };
-    const sources = layerSources[target];
+    } as const;
+    // SAFETY: target comes from the focus nonce the app sets to a known layer.
+    const sources: ReadonlyArray<string> | undefined =
+      layerSources[target as keyof typeof layerSources];
     if (sources === undefined) {
       return;
     }

@@ -22,6 +22,7 @@ import { type Document, type Html, type HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
 import { evo } from "foldkit/struct";
 import { Button, Input } from "@foldkit/ui";
+import { gpxDownload } from "./gpx.js";
 import {
   registerArahMap,
   type MapMarker,
@@ -1015,6 +1016,7 @@ const routeCard = (
 const layerPanel = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Class("flex flex-col gap-1.5")],
+    // SAFETY: keys of layerSources are exactly the OverlayLayer union members.
     (Object.keys(layerSources) as Array<OverlayLayer>).map((layer) => {
       const hidden = model.hiddenLayers.includes(layer);
       const isolated = model.layerFocus === layer;
@@ -1097,6 +1099,28 @@ const legend = (h: HtmlBuilder<Message>): Html =>
       ]),
     ],
   );
+
+const exportGpxLink = (
+  decision: DecisionOutput,
+  routeId: string | undefined,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const route = decision.routes.find((row) => row.id === routeId);
+  if (route === undefined) {
+    return h.empty;
+  }
+  const download = gpxDownload(route);
+  return h.a(
+    [
+      h.Href(download.href),
+      h.Download(download.filename),
+      h.Class(
+        "self-start px-3 py-1.5 rounded-full border border-emerald-600 bg-white text-xs font-semibold text-emerald-700",
+      ),
+    ],
+    ["Export GPX"],
+  );
+};
 
 const verdictChips = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
@@ -1309,6 +1333,7 @@ const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
                     ["Recenter"],
                   ),
                   verdictChips(model, h),
+                  exportGpxLink(decision, active?.routeId, h),
                   cards.length > 0
                     ? h.div(
                         [h.Class("flex gap-3 overflow-x-auto pb-1 snap-x")],
