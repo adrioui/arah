@@ -10,6 +10,7 @@ import {
   type RouteRequest,
 } from "./domain.js";
 import { decide } from "./decide.js";
+import { sampleRouteElevation } from "./elevation.js";
 import { rankGoRoutes } from "./fit.js";
 import { ObservationState, fetchFlood, fetchNowcast } from "./observations.js";
 import { PlaceNotFound, PlaceResolver } from "./placeResolve.js";
@@ -243,7 +244,31 @@ export class PlanRide extends Context.Service<
             nowMs,
           );
 
-          const ranked = rankGoRoutes(hazard.ranked, candidates);
+          const rankedBase = rankGoRoutes(hazard.ranked, candidates);
+          const ranked =
+            isLiveWeather() === false
+              ? rankedBase
+              : yield* Effect.forEach(
+                  rankedBase,
+                  (row) =>
+                    Effect.gen(function* () {
+                      const route = candidates.find(
+                        (candidate) => candidate.id === row.routeId,
+                      );
+                      if (route === undefined) {
+                        return row;
+                      }
+                      const samples = yield* Effect.tryPromise({
+                        try: () =>
+                          sampleRouteElevation(row.routeId, route.points),
+                        catch: () => null,
+                      }).pipe(Effect.orElseSucceed(() => []));
+                      return samples.length === 0
+                        ? row
+                        : { ...row, elevation: [...samples] };
+                    }),
+                  { concurrency: 2 },
+                );
           const routeSources = [
             ...new Set(candidates.map((route) => route.routeSource)),
           ];

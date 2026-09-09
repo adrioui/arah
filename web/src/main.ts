@@ -963,6 +963,57 @@ const searchHeader = (model: Model, h: HtmlBuilder<Message>): Html =>
     ],
   );
 
+const elevationGain = (samples: ReadonlyArray<number>): number => {
+  let gain = 0;
+  for (let i = 1; i < samples.length; i = i + 1) {
+    const climb = (samples[i] ?? 0) - (samples[i - 1] ?? 0);
+    if (climb > 0) {
+      gain = gain + climb;
+    }
+  }
+  return Math.round(gain);
+};
+
+const elevationSparkline = (
+  samples: ReadonlyArray<number>,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const min = Math.min(...samples);
+  const max = Math.max(...samples);
+  const span = Math.max(1, max - min);
+  const width = 232;
+  const height = 36;
+  const step = samples.length > 1 ? width / (samples.length - 1) : 0;
+  const line = samples
+    .map((sample, index) => {
+      const x = (index * step).toFixed(1);
+      const y = (height - 3 - ((sample - min) / span) * (height - 8)).toFixed(1);
+      return `${x},${y}`;
+    })
+    .join(" ");
+  return h.div([h.Class("flex flex-col gap-0.5")], [
+    h.svg(
+      [
+        h.Class("w-full"),
+        h.ViewBox(`0 0 ${width} ${height}`),
+        h.AriaLabel(`Elevation profile, ${Math.round(min)} to ${Math.round(max)} meters`),
+      ],
+      [
+        h.polyline([
+          h.Points(line),
+          h.Fill("none"),
+          h.Stroke("#0d9488"),
+          h.StrokeWidth("2"),
+        ]),
+      ],
+    ),
+    h.p(
+      [h.Class("text-[11px] text-slate-500")],
+      [`↗ ${elevationGain(samples)} m over ${samples.length} samples`],
+    ),
+  ]);
+};
+
 const routeCard = (
   model: Model,
   decision: DecisionOutput,
@@ -1009,6 +1060,9 @@ const routeCard = (
         ],
       ),
       h.p([h.Class("text-xs text-slate-600")], [meta.join(" · ")]),
+      ranked.elevation !== undefined && ranked.elevation.length > 1
+        ? elevationSparkline(ranked.elevation, h)
+        : h.empty,
     ],
   );
 };

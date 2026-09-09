@@ -27,10 +27,7 @@ export function routeToGpx(route: GpxRoute): string {
 }
 
 /** Download-ready data URL plus filename for one route. */
-export function gpxDownload(route: GpxRoute): {
-  href: string;
-  filename: string;
-} {
+export function gpxDownload(route: GpxRoute) {
   return {
     href: `data:application/gpx+xml;charset=utf-8,${encodeURIComponent(routeToGpx(route))}`,
     filename: `${route.id}.gpx`,

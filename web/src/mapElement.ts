@@ -432,6 +432,7 @@ class ArahMapElement extends HTMLElement {
         },
         geometry: {
           type: "Point" as const,
+          // SAFETY: marker lat/lon decode as finite numbers from the schema.
           coordinates: [marker.lon, marker.lat] as [number, number],
         },
       })),
