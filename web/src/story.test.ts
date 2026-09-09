@@ -168,6 +168,22 @@ test("submitting a report sends feedback", () => {
   );
 });
 
+test("basemap toggles with night and manual switch", () => {
+  story(
+    update,
+    given(init().model),
+    message(Message.ToggledNight()),
+    model((next) => {
+      expect(next.night).toBe(true);
+      expect(next.basemap).toBe("dark");
+    }),
+    message(Message.SetBasemap({ basemap: "light" })),
+    model((next) => {
+      expect(next.basemap).toBe("light");
+    }),
+  );
+});
+
 test("copying a share link shows confirmation", () => {
   story(
     update,

@@ -81,6 +81,9 @@ type ReportKind = typeof ReportKind.Type;
 const HillComfort = Schema.Literals(["flat", "mixed", "climber"]);
 type HillComfort = typeof HillComfort.Type;
 
+const Basemap = Schema.Literals(["light", "dark"]);
+type Basemap = typeof Basemap.Type;
+
 const hillComfortValue: Record<HillComfort, number> = {
   flat: 0,
   mixed: 0.5,
@@ -108,6 +111,7 @@ const ArahMap = CustomElement.define({
     markers: Schema.String,
     mapFocus: Schema.String,
     isochrone: Schema.String,
+    basemap: Schema.String,
   },
   events: {},
 });
@@ -135,6 +139,7 @@ export const Model = Schema.Struct({
   avoidUnlit: Schema.Boolean,
   preferProtected: Schema.Boolean,
   shareNotice: Schema.String,
+  basemap: Basemap,
 });
 export type Model = typeof Model.Type;
 
@@ -173,6 +178,7 @@ const Message = defineMessageUnion({
   CopyShareLink: { text: Schema.String },
   SucceededShareCopy: {},
   FailedShareCopy: { error: Schema.String },
+  SetBasemap: { basemap: Basemap },
 });
 
 export { Message };
@@ -219,7 +225,10 @@ export const update = (model: Model, message: Message) =>
       };
     },
     ToggledNight: () => ({
-      model: evo(model, { night: (current) => current === false }),
+      model: evo(model, {
+        night: (current) => current === false,
+        basemap: (current) => (current === "light" ? "dark" : "light"),
+      }),
     }),
     SucceededSuggestions: ({ target, suggestions }) => {
       if (target !== model.suggestFor) {
@@ -421,6 +430,9 @@ export const update = (model: Model, message: Message) =>
     FailedShareCopy: ({ error }) => ({
       model: evo(model, { shareNotice: () => error }),
     }),
+    SetBasemap: ({ basemap }) => ({
+      model: evo(model, { basemap: () => basemap }),
+    }),
   });
 
 // INIT
@@ -447,6 +459,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
     avoidUnlit: false,
     preferProtected: false,
     shareNotice: "",
+    basemap: "light",
   },
   commands: [FetchHealth()],
 });
@@ -841,6 +854,7 @@ const mapHost = (
           arahMap.Isochrone(
             JSON.stringify(decision === undefined ? [] : (decision.isochrone ?? [])),
           ),
+          arahMap.Basemap(model.basemap),
         ],
         [],
       ),
@@ -1549,15 +1563,34 @@ const routeSheet = (model: Model, h: HtmlBuilder<Message>): Html =>
                     : []),
                   layerPanel(model, h),
                   legend(h),
-                  h.button(
+                  h.div(
+                    [h.Class("flex gap-1.5")],
                     [
-                      h.Class(
-                        "self-start px-3 py-1.5 rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600",
+                      h.button(
+                        [
+                          h.Class(
+                            "px-3 py-1.5 rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600",
+                          ),
+                          h.OnClick(Message.Recentered()),
+                          h.AriaLabel("Recenter map on home area"),
+                        ],
+                        ["Recenter"],
                       ),
-                      h.OnClick(Message.Recentered()),
-                      h.AriaLabel("Recenter map on home area"),
+                      h.button(
+                        [
+                          h.Class(
+                            `px-3 py-1.5 rounded-full border text-xs font-semibold transition ${model.basemap === "dark" ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-300"}`,
+                          ),
+                          h.OnClick(
+                            Message.SetBasemap({
+                              basemap: model.basemap === "dark" ? "light" : "dark",
+                            }),
+                          ),
+                          h.AriaPressed(model.basemap === "dark" ? "true" : "false"),
+                        ],
+                        [model.basemap === "dark" ? "Dark map" : "Light map"],
+                      ),
                     ],
-                    ["Recenter"],
                   ),
                   verdictChips(model, h),
                   exportGpxLink(decision, active?.routeId, h),

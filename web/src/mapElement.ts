@@ -54,8 +54,12 @@ export interface MapMarker {
   readonly kind: "origin" | "destination";
 }
 
-const STYLE_URL =
-  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+const STYLE_URLS = {
+  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+} as const;
+
+export type BasemapKind = keyof typeof STYLE_URLS;
 
 function coordinates(
   points: ReadonlyArray<{ readonly lat: number; readonly lon: number }>,
@@ -234,6 +238,7 @@ class ArahMapElement extends HTMLElement {
   #isochrone: ReadonlyArray<{ readonly lat: number; readonly lon: number }> =
     [];
   #selected: string = "";
+  #basemap: BasemapKind = "light";
   #focus: string = "";
   #popup: maplibregl.Popup | null = null;
 
@@ -244,13 +249,14 @@ class ArahMapElement extends HTMLElement {
     maplibregl.setWorkerUrl(maplibreWorkerUrl);
     this.#map = new maplibregl.Map({
       container: this,
-      style: STYLE_URL,
+      style: STYLE_URLS[this.#basemap],
       center: HOME_CENTER,
       zoom: HOME_ZOOM,
     });
     this.#map.addControl(
       new maplibregl.NavigationControl({ visualizePitch: true }),
     );
+    this.#map.on("style.load", () => this.render());
     this.#map.on("click", "observation-fill", (event) =>
       this.showObservationPopup(event),
     );
@@ -287,6 +293,21 @@ class ArahMapElement extends HTMLElement {
 
   get selected(): string {
     return this.#selected;
+  }
+
+  set basemap(value: string) {
+    const next: BasemapKind = value === "dark" ? "dark" : "light";
+    if (next === this.#basemap) {
+      return;
+    }
+    this.#basemap = next;
+    if (this.#map !== null) {
+      this.#map.setStyle(STYLE_URLS[next]);
+    }
+  }
+
+  get basemap(): string {
+    return this.#basemap;
   }
 
   set markers(value: string) {
