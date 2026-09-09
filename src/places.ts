@@ -42,6 +42,26 @@ export class PlacesParseError extends Schema.TaggedError<PlacesParseError>()(
 
 const PLACES_PATH = "data/places.json";
 
+function tokenPrefixHit(normalized: string, candidate: string): boolean {
+  const queryTokens = normalized
+    .split(" ")
+    .filter((token) => token.length >= 4);
+  const candidateTokens = candidate
+    .split(" ")
+    .filter((token) => token.length >= 4);
+  for (const queryToken of queryTokens) {
+    for (const candidateToken of candidateTokens) {
+      if (
+        queryToken.startsWith(candidateToken) ||
+        candidateToken.startsWith(queryToken)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function entryMatches(entry: RegistryEntry, normalized: string): boolean {
   if (normalizePlaceQuery(entry.label) === normalized) {
     return true;
@@ -49,12 +69,15 @@ function entryMatches(entry: RegistryEntry, normalized: string): boolean {
   if (normalizePlaceQuery(entry.id) === normalized) {
     return true;
   }
-  for (const alias of entry.aliases) {
+  for (const alias of [entry.label, entry.id, ...entry.aliases]) {
     const aliasNorm = normalizePlaceQuery(alias);
     if (aliasNorm.length === 0) {
       continue;
     }
     if (aliasNorm === normalized || normalized.includes(aliasNorm)) {
+      return true;
+    }
+    if (tokenPrefixHit(normalized, aliasNorm)) {
       return true;
     }
   }
@@ -78,11 +101,13 @@ export class Places extends Context.Service<
     Places,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const text = yield* fs.readFileString(PLACES_PATH).pipe(
-        Effect.catch(() =>
-          Effect.fail(new PlacesReadError({ path: PLACES_PATH })),
-        ),
-      );
+      const text = yield* fs
+        .readFileString(PLACES_PATH)
+        .pipe(
+          Effect.catch(() =>
+            Effect.fail(new PlacesReadError({ path: PLACES_PATH })),
+          ),
+        );
       const exit = Schema.decodeUnknownExit(Schema.fromJsonString(PlacesFile))(
         text,
       );

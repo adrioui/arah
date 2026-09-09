@@ -41,6 +41,23 @@ export class PlaceNotFound extends Schema.TaggedError<PlaceNotFound>()(
   { httpApiStatus: 422 },
 ) {}
 
+/** Rides stay inside Jabodetabek. Geocoder hits outside are treated as misses. */
+const SERVICE_REGION = {
+  minLat: -6.8,
+  maxLat: -5.8,
+  minLon: 106.3,
+  maxLon: 107.3,
+} as const;
+
+function insideServiceRegion(point: GeoPoint): boolean {
+  return (
+    point.lat >= SERVICE_REGION.minLat &&
+    point.lat <= SERVICE_REGION.maxLat &&
+    point.lon >= SERVICE_REGION.minLon &&
+    point.lon <= SERVICE_REGION.maxLon
+  );
+}
+
 function fromCoords(point: GeoPoint, label: string): ResolvedPlace {
   return {
     label,
@@ -67,7 +84,7 @@ function fetchNominatim(
 ): Effect.Effect<ResolvedPlace | null, never, HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=id&viewbox=106.3,-5.8,107.3,-6.8&bounded=1&q=${encodeURIComponent(query)}`;
     const fetched = yield* Effect.exit(
       client
         .get(url, {
@@ -92,6 +109,9 @@ function fetchNominatim(
     if (Number.isNaN(lat) || Number.isNaN(lon)) {
       return null;
     }
+    if (insideServiceRegion({ lat, lon }) === false) {
+      return null;
+    }
     return {
       label: hit.display_name,
       point: { lat, lon },
@@ -108,18 +128,17 @@ function fetchPhoton(
     const client = yield* HttpClient.HttpClient;
     const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lat=${bias.lat}&lon=${bias.lon}&limit=1`;
     const fetched = yield* Effect.exit(
-      client
-        .get(url)
-        .pipe(
-          Effect.flatMap((response) =>
-            HttpClientResponse.schemaBodyJson(PhotonFeatureCollection)(
-              response,
-            ),
-          ),
-          Effect.timeout(8000),
+      client.get(url).pipe(
+        Effect.flatMap((response) =>
+          HttpClientResponse.schemaBodyJson(PhotonFeatureCollection)(response),
         ),
+        Effect.timeout(8000),
+      ),
     );
-    if (Exit.isSuccess(fetched) === false || fetched.value.features.length === 0) {
+    if (
+      Exit.isSuccess(fetched) === false ||
+      fetched.value.features.length === 0
+    ) {
       return null;
     }
     const feature = fetched.value.features[0];
@@ -130,6 +149,9 @@ function fetchPhoton(
     const lon = coords[0];
     const lat = coords[1];
     if (lon === undefined || lat === undefined) {
+      return null;
+    }
+    if (insideServiceRegion({ lat, lon }) === false) {
       return null;
     }
     const name = feature.properties.name ?? query;
@@ -149,11 +171,7 @@ export class PlaceResolver extends Context.Service<
     readonly resolve: (
       input: PlaceInput,
       bias: GeoPoint,
-    ) => Effect.Effect<
-      ResolvedPlace,
-      PlaceNotFound,
-      HttpClient.HttpClient
-    >;
+    ) => Effect.Effect<ResolvedPlace, PlaceNotFound, HttpClient.HttpClient>;
   }
 >()("arah/PlaceResolver") {
   static readonly layer = Layer.effect(
@@ -163,14 +181,13 @@ export class PlaceResolver extends Context.Service<
       const resolve = (
         input: PlaceInput,
         bias: GeoPoint,
-      ): Effect.Effect<
-        ResolvedPlace,
-        PlaceNotFound,
-        HttpClient.HttpClient
-      > =>
+      ): Effect.Effect<ResolvedPlace, PlaceNotFound, HttpClient.HttpClient> =>
         Effect.gen(function* () {
           if (isGeoPoint(input)) {
-            return fromCoords(input, `${input.lat.toFixed(4)}, ${input.lon.toFixed(4)}`);
+            return fromCoords(
+              input,
+              `${input.lat.toFixed(4)}, ${input.lon.toFixed(4)}`,
+            );
           }
 
           const query = placeQueryText(input);

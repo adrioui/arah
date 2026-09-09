@@ -34,6 +34,9 @@ importers:
       maplibre-gl:
         specifier: ^6.7.0
         version: 6.7.0
+      undici:
+        specifier: ^8.10.2
+        version: 8.10.2
     devDependencies:
       '@foldkit/vite-plugin':
         specifier: 0.20.1

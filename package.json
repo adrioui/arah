@@ -24,7 +24,8 @@
     "@foldkit/ui": "0.158.1",
     "effect": "4.0.0-rc.112",
     "foldkit": "0.158.1",
-    "maplibre-gl": "^6.7.0"
+    "maplibre-gl": "^6.7.0",
+    "undici": "^8.10.2"
   },
   "devDependencies": {
     "@foldkit/vite-plugin": "0.20.1",

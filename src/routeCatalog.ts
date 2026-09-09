@@ -1,10 +1,5 @@
 import { Context, Effect, Exit, FileSystem, Layer, Schema } from "effect";
-import {
-  CandidateRoute,
-  GeoPoint,
-  ResolvedPlace,
-  RouteId,
-} from "./domain.js";
+import { CandidateRoute, GeoPoint, ResolvedPlace, RouteId } from "./domain.js";
 import { normalizePlaceQuery } from "./domain.js";
 
 const CuratedRoute = Schema.Struct({
@@ -69,6 +64,7 @@ export class RouteCatalog extends Context.Service<
   RouteCatalog,
   {
     readonly snapshotId: string;
+    readonly pointToPointIds: ReadonlyArray<string>;
     readonly findPointToPoint: (
       origin: ResolvedPlace,
       destination: ResolvedPlace,
@@ -79,11 +75,13 @@ export class RouteCatalog extends Context.Service<
     RouteCatalog,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const text = yield* fs.readFileString(ROUTES_PATH).pipe(
-        Effect.catch(() =>
-          Effect.fail(new RouteCatalogReadError({ path: ROUTES_PATH })),
-        ),
-      );
+      const text = yield* fs
+        .readFileString(ROUTES_PATH)
+        .pipe(
+          Effect.catch(() =>
+            Effect.fail(new RouteCatalogReadError({ path: ROUTES_PATH })),
+          ),
+        );
       const exit = Schema.decodeUnknownExit(Schema.fromJsonString(RoutesFile))(
         text,
       );
@@ -92,10 +90,12 @@ export class RouteCatalog extends Context.Service<
       }
       const data: RoutesFile = exit.value;
       const routesByPair = new Map<string, CandidateRoute>();
+      const pointToPointIds: Array<string> = [];
       for (const route of data.routes) {
         if (route.kind !== "point-to-point") {
           continue;
         }
+        pointToPointIds.push(route.id);
         const from = route.from;
         const to = route.to;
         if (from === undefined || to === undefined) {
@@ -112,12 +112,15 @@ export class RouteCatalog extends Context.Service<
         destination: ResolvedPlace,
       ): CandidateRoute | null => {
         const originKey = entryKey(origin.venueId ?? origin.label);
-        const destinationKey = entryKey(destination.venueId ?? destination.label);
+        const destinationKey = entryKey(
+          destination.venueId ?? destination.label,
+        );
         return routesByPair.get(`${originKey}|${destinationKey}`) ?? null;
       };
 
       return RouteCatalog.of({
         snapshotId: data.snapshotId,
+        pointToPointIds,
         findPointToPoint,
       });
     }),

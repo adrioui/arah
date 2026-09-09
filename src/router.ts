@@ -1,5 +1,6 @@
 import { Context, Effect, Exit, Layer, Schedule, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { Agent, fetch as undiciFetch } from "undici";
 import {
   CandidateRoute,
   GeoPoint,
@@ -58,6 +59,18 @@ function osrmBaseUrl(): string {
 function isOnline(): boolean {
   return (process.env["ARAH_ONLINE"] ?? "1") !== "0";
 }
+
+/** Public OSRM resolves to IPv6 first and this host cannot route it. Pin OSRM to IPv4. */
+const ipv4Agent = new Agent({ connect: { family: 4 } });
+
+const fetchOsrmPayload = (url: string): Effect.Effect<unknown, never, never> =>
+  Effect.tryPromise({
+    try: () =>
+      undiciFetch(url, { dispatcher: ipv4Agent, signal: AbortSignal.timeout(8_000) }).then(async (response) =>
+        response.ok ? response.json() : null,
+      ),
+    catch: () => undefined,
+  }).pipe(Effect.orElseSucceed(() => null));
 
 function decodeRouteId(raw: string): RouteId {
   return Schema.decodeSync(RouteId)(raw);
@@ -274,7 +287,6 @@ function fetchWithRetry<A, E, R>(
 export function fetchGraphHopperRoute(
   origin: GeoPoint,
   destination: GeoPoint,
-  id: string,
   name: string,
   snapshotId: string,
 ): Effect.Effect<
@@ -319,28 +331,19 @@ export function fetchOsrmRoute(
   id: string,
   name: string,
   snapshotId: string,
-): Effect.Effect<CandidateRoute | null, never, HttpClient.HttpClient> {
+): Effect.Effect<CandidateRoute | null, never, never> {
   return Effect.gen(function* () {
     if (isOnline() === false) {
       return null;
     }
-    const client = yield* HttpClient.HttpClient;
     const coordPath = `${origin.lon},${origin.lat};${destination.lon},${destination.lat}`;
     const url = `${osrmBaseUrl()}/cycling/${coordPath}?overview=full&geometries=geojson`;
-    const fetched = yield* Effect.exit(
-      fetchWithRetry(
-        client.get(url).pipe(
-          Effect.flatMap((response) =>
-            HttpClientResponse.schemaBodyJson(OsrmRoute)(response),
-          ),
-          Effect.timeout(8_000),
-        ),
-      ),
-    );
-    if (Exit.isSuccess(fetched) === false || fetched.value.routes.length === 0) {
+    const payload = yield* fetchWithRetry(fetchOsrmPayload(url));
+    const exit = Schema.decodeUnknownExit(OsrmRoute)(payload);
+    if (Exit.isSuccess(exit) === false || exit.value.routes.length === 0) {
       return null;
     }
-    const route = fetched.value.routes[0];
+    const route = exit.value.routes[0];
     if (route === undefined) {
       return null;
     }
@@ -370,7 +373,6 @@ export function goCandidates(
     const graphhopper = yield* fetchGraphHopperRoute(
       origin.point,
       destination.point,
-      "go-graphhopper-primary",
       `${name} (GraphHopper)`,
       catalog.snapshotId,
     );

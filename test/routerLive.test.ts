@@ -88,7 +88,6 @@ describe("live routing adapters", () => {
       fetchGraphHopperRoute(
         origin,
         destination,
-        "go-graphhopper-primary",
         "test (GraphHopper)",
         "snapshot-1",
       ).pipe(

@@ -1,10 +1,18 @@
 import { Effect, FileSystem, Layer, Schema, Semaphore } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { ArahApi, FeedbackRejected, Health, Received, RoutesResponse } from "./api/Api.js";
+import { NodeFileSystem } from "@effect/platform-node";
+import {
+  ArahApi,
+  FeedbackRejected,
+  Health,
+  Received,
+  RoutesResponse,
+} from "./api/Api.js";
 import { PlaceSearchResponse } from "./domain.js";
 import { ObservationState } from "./observations.js";
 import { PlanRide } from "./planRide.js";
 import { Places } from "./places.js";
+import { RouteCatalog } from "./routeCatalog.js";
 import { trainCandidates } from "./router.js";
 
 const FEEDBACK_PATH = "data/feedback.jsonl";
@@ -24,6 +32,7 @@ export const RidesHandlersNoDeps = HttpApiBuilder.group(
     const planner = yield* PlanRide;
     const places = yield* Places;
     const state = yield* ObservationState;
+    const catalog = yield* RouteCatalog;
 
     return handlers.handleAll({
       decide: ({ payload }) => planner.plan(payload),
@@ -61,7 +70,7 @@ export const RidesHandlersNoDeps = HttpApiBuilder.group(
       },
       feedback: ({ payload }) =>
         Effect.gen(function* () {
-          const knownRouteIds = new Set(
+          const knownRouteIds = new Set<string>(
             places.venues
               .flatMap((venue) =>
                 trainCandidates(
@@ -77,6 +86,12 @@ export const RidesHandlersNoDeps = HttpApiBuilder.group(
               )
               .map((route) => route.id),
           );
+          for (const routeId of catalog.pointToPointIds) {
+            knownRouteIds.add(routeId);
+          }
+          for (const routeId of liveGoRouteIds) {
+            knownRouteIds.add(routeId);
+          }
           if (knownRouteIds.has(payload.routeId) === false) {
             return yield* new FeedbackRejected({
               detail: `unknown routeId ${payload.routeId}`,
@@ -106,7 +121,19 @@ export const RidesHandlersNoDeps = HttpApiBuilder.group(
   }),
 );
 
+/** Live go route ids never stored in the catalog. */
+const liveGoRouteIds: ReadonlyArray<string> = [
+  "go-graphhopper-primary",
+  "go-osrm-primary",
+  "go-direct",
+];
+
 /** Handlers with planner and places layers provided, ready to serve. */
 export const RidesHandlersLive = RidesHandlersNoDeps.pipe(
-  Layer.provide([PlanRide.layer, Places.layer, ObservationState.layer]),
+  Layer.provide([
+    PlanRide.layer,
+    Places.layer,
+    ObservationState.layer,
+    RouteCatalog.layer.pipe(Layer.provide(NodeFileSystem.layer)),
+  ]),
 );
