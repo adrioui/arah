@@ -1,17 +1,17 @@
 import { Command, given, message, model, story } from "foldkit/story";
 import { expect, test } from "vitest";
 
-import { FetchDecision, Message, init, update } from "./main.js";
+import { FetchDecision, FetchSuggestions, Message, init, update } from "./main.js";
 
-test("submitting a valid intention enters loading", () => {
+test("submitting a train search enters loading", () => {
   const initial = {
     ...init().model,
-    intention: "long ride at alsut 150 min",
+    venueDraft: "alsut",
   };
   story(
     update,
     given(initial),
-    message(Message.SubmittedIntention()),
+    message(Message.SubmittedSearch()),
     model((next) => {
       expect(next.decision._tag).toBe("Loading");
     }),
@@ -22,30 +22,83 @@ test("submitting a valid intention enters loading", () => {
   );
 });
 
-test("submitting with empty intention shows validation failure", () => {
+test("submitting a train search without a venue shows validation failure", () => {
   story(
     update,
-    given({
-      ...init().model,
-      intention: "   ",
-    }),
-    message(Message.SubmittedIntention()),
+    given(init().model),
+    message(Message.SubmittedSearch()),
     model((next) => {
       expect(next.decision._tag).toBe("Failure");
       if (next.decision._tag === "Failure") {
-        expect(next.decision.error).toContain("Type a ride");
+        expect(next.decision.error).toContain("venue");
       }
     }),
   );
 });
 
-test("updated intention stores typed state", () => {
+test("go mode without a destination shows validation failure", () => {
+  const initial = {
+    ...init().model,
+    mode: "train" as const,
+  };
+  story(
+    update,
+    given(initial),
+    message(Message.SelectedMode({ mode: "go" })),
+    message(Message.SubmittedSearch()),
+    model((next) => {
+      expect(next.mode).toBe("go");
+      expect(next.decision._tag).toBe("Failure");
+      if (next.decision._tag === "Failure") {
+        expect(next.decision.error).toContain("destination");
+      }
+    }),
+  );
+});
+
+test("selecting a venue suggestion fills the draft", () => {
+  const initial = {
+    ...init().model,
+    suggestFor: "venue" as const,
+  };
+  story(
+    update,
+    given(initial),
+    message(Message.SelectedSuggestion({ id: "alsut-loop", label: "Alsut loop" })),
+    model((next) => {
+      expect(next.venueDraft).toBe("Alsut loop");
+      expect(next.suggestFor).toBe("none");
+    }),
+  );
+});
+
+test("toggling a layer hides and restores it", () => {
   story(
     update,
     given(init().model),
-    message(Message.UpdatedIntention({ value: "go to oksigasi" })),
+    message(Message.ToggledLayer({ layer: "flood" })),
     model((next) => {
-      expect(next.intention).toBe("go to oksigasi");
+      expect(next.hiddenLayers).toContain("flood");
     }),
+    message(Message.ToggledLayer({ layer: "flood" })),
+    model((next) => {
+      expect(next.hiddenLayers).not.toContain("flood");
+    }),
+  );
+});
+
+test("typing a venue stores the draft", () => {
+  story(
+    update,
+    given(init().model),
+    message(Message.UpdatedVenue({ value: "binloop" })),
+    model((next) => {
+      expect(next.venueDraft).toBe("binloop");
+      expect(next.suggestFor).toBe("venue");
+    }),
+    Command.resolve(
+      FetchSuggestions,
+      Message.SucceededSuggestions({ target: "venue", suggestions: [] }),
+    ),
   );
 });
